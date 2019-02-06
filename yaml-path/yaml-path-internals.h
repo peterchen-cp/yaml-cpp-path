@@ -22,59 +22,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "yaml-path.h"
-#include "yaml-path-internals.h"
-#include <yaml-cpp/yaml.h>
+#pragma once
 
+/* This exposes yaml-path detaisl to make them accessible to tests. 
+   The part after "// ----- Implementation"  can be inserted into yaml-path.cpp 
+   instead of the include.
+*/
+
+
+#include "yaml-path.h"
 
 namespace YAML
 {
-
    namespace YamlPathDetail
    {
-      Node NullNode()
-      {
-         static auto nullNode = Node()["x"];
-         return nullNode;
-      }
+      yaml_path SplitAt(yaml_path & path, size_t offset);
 
-      /// result = target; target = newValue
-      template <typename T>
-      T Exchange(T & target, T newValue)
-      {
-         std::swap(target, newValue);
-         return newValue;
-      }
-
-      yaml_path SplitAt(yaml_path & path, size_t offset)
-      {
-         if (offset == 0)
-            return yaml_path();
-
-         if (offset >= path.size())
-            return Exchange(path, yaml_path());
-
-         yaml_path result = path.substr(0, offset);
-         path = path.substr(offset);
-         return result;
-      }
-
-   } // YamlPathDetail
-
-   using namespace YamlPathDetail;
-
-   void PathResolve(YAML::Node & node, yaml_path & path)
-   {
-      if (path.empty())
-         return;
-
-      node.reset();
-      return;
+      template <typename TPred>
+      yaml_path Split(yaml_path & path, TPred pred);
    }
+}
 
-   Node PathAt(YAML::Node node, yaml_path path)
+// ----- Implementation
+
+namespace YAML
+{
+   namespace YamlPathDetail
    {
-      PathResolve(node, path);
-      return path.length() ? NullNode() : node;
+      template <typename TPred>
+      yaml_path Split(yaml_path & path, TPred pred)
+      {
+         size_t offset = 0;
+         while (offset < path.size() && pred(path[offset]))
+            ++offset;
+         return SplitAt(path, offset);
+      }
    }
-} // namespace YAML
+}
