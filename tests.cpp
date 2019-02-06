@@ -12,7 +12,7 @@ TEST_CASE("Internal: SplitAt")
 {
    using namespace YAML::YamlPathDetail;
 
-   auto Check = [](yaml_path p, size_t offset, yaml_path expectedResult, yaml_path expectedP)
+   auto Check = [](path_arg p, size_t offset, path_arg expectedResult, path_arg expectedP)
    {
       CHECK(p.size() == expectedResult.size() + expectedP.size());
       auto result = SplitAt(p, offset);
@@ -36,7 +36,7 @@ TEST_CASE("Internal: SplitAt")
 
 namespace
 {
-   void CheckSplit(yaml_path p, yaml_path expectedResult, yaml_path expectedP)
+   void CheckSplit(path_arg p, path_arg expectedResult, path_arg expectedP)
    {
       using namespace YAML::YamlPathDetail;
 

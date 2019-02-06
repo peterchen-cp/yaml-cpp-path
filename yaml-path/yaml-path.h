@@ -30,8 +30,9 @@ namespace YAML
 {
    class Node;
 
-   using yaml_path = std::string_view;
+   using path_arg = std::string_view;
 
-   Node PathAt(YAML::Node node, yaml_path path);
-   void PathResolve(YAML::Node & node, yaml_path & path);
+   Node PathAt(YAML::Node node, path_arg path);
+   void PathResolve(YAML::Node & node, path_arg & path);
+   void PathResolve(YAML::Node & node, path_arg & path);
 }

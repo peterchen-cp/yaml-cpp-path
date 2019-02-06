@@ -46,15 +46,15 @@ namespace YAML
          return newValue;
       }
 
-      yaml_path SplitAt(yaml_path & path, size_t offset)
+      path_arg SplitAt(path_arg & path, size_t offset)
       {
          if (offset == 0)
-            return yaml_path();
+            return path_arg();
 
          if (offset >= path.size())
-            return Exchange(path, yaml_path());
+            return Exchange(path, path_arg());
 
-         yaml_path result = path.substr(0, offset);
+         path_arg result = path.substr(0, offset);
          path = path.substr(offset);
          return result;
       }
@@ -63,7 +63,7 @@ namespace YAML
 
    using namespace YamlPathDetail;
 
-   void PathResolve(YAML::Node & node, yaml_path & path)
+   void PathResolve(YAML::Node & node, path_arg & path)
    {
       if (path.empty())
          return;
@@ -72,7 +72,7 @@ namespace YAML
       return;
    }
 
-   Node PathAt(YAML::Node node, yaml_path path)
+   Node PathAt(YAML::Node node, path_arg path)
    {
       PathResolve(node, path);
       return path.length() ? NullNode() : node;

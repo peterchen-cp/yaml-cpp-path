@@ -36,10 +36,10 @@ namespace YAML
 {
    namespace YamlPathDetail
    {
-      yaml_path SplitAt(yaml_path & path, size_t offset);
+      path_arg SplitAt(path_arg & path, size_t offset);
 
       template <typename TPred>
-      yaml_path Split(yaml_path & path, TPred pred);
+      path_arg Split(path_arg & path, TPred pred);
    }
 }
 
@@ -50,7 +50,7 @@ namespace YAML
    namespace YamlPathDetail
    {
       template <typename TPred>
-      yaml_path Split(yaml_path & path, TPred pred)
+      path_arg Split(path_arg & path, TPred pred)
       {
          size_t offset = 0;
          while (offset < path.size() && pred(path[offset]))
