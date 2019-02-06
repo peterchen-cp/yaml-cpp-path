@@ -8,14 +8,6 @@
 
 using namespace YAML;
 
-TEST_CASE("Let's try!")
-{
-   auto n = Load("alpha : 1");
-
-   CHECK(PathAt(n, "") == n);
-   CHECK(!PathAt(n, "xyz"));     // non-existing node
-}
-
 TEST_CASE("Internal: SplitAt")
 {
    using namespace YAML::YamlPathDetail;
