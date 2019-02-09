@@ -32,6 +32,18 @@ namespace YAML
 
    using path_arg = std::string_view;
 
+   enum class EPathError
+   {
+      None,
+      Internal,
+      InvalidToken,
+      IndexExpected,
+      InvalidIndex,
+      InvalidNodeType,
+      NodeNotFound,
+   };
+
+   EPathError PathValidate(path_arg p);
    Node PathAt(YAML::Node node, path_arg path);
    void PathResolve(YAML::Node & node, path_arg & path);
    void PathResolve(YAML::Node & node, path_arg & path);
