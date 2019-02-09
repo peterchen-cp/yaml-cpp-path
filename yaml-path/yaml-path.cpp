@@ -30,13 +30,49 @@ SOFTWARE.
 namespace YAML
 {
 
+   // ----- PathException
+   std::string const & PathException::What() const
+   {
+      if (!m_what.length())
+         return m_what;
+      switch (m_error)
+      {
+      case EPathError::None:   return m_what = "OK";
+      case EPathError::InvalidToken:
+         return m_what = (std::stringstream() << "Invalid Token at position " << m_offset << ": " << m_value).str();
+
+      case EPathError::IndexExpected:
+         return m_what = (std::stringstream() << "Index expected at position " << m_offset << ": " << m_value).str();
+
+      default:
+         return m_what = (std::stringstream() << "Undefined exception #" << (int)m_error << " at offset " << m_offset << ": " << m_value).str();
+      }
+   }
+
+   void PathException::ThrowDerived()
+   {
+      switch (m_error)
+      {
+         case EPathError::None: assert(false);  return;
+         case EPathError::Internal: throw PathInternalException(m_offset, m_value);
+         case EPathError::InvalidToken: throw PathInvalidTokenException(m_offset, m_value);
+         case EPathError::IndexExpected: throw PathIndexExpectedException(m_offset, m_value);
+         case EPathError::InvalidIndex: throw PathInvalidIndexException(m_offset, m_value);
+         case EPathError::InvalidNodeType: throw PathInvalidNodeTypeException(m_offset, m_value);
+         case EPathError::NodeNotFound: throw PathNodeNotFoundException(m_offset, m_value);
+         default: throw *this;
+      }
+   }
+
    namespace YamlPathDetail
    {
       // ----- Utility functions
-      Node NullNode()
+
+      /// Creates an undefined YAML node (<code>(bool)UndefinedNode() == false</code>)
+      Node UndefinedNode()
       {
-         static auto nullNode = Node()["x"];
-         return nullNode;
+         static auto undefinedNode = Node()["x"];
+         return undefinedNode;
       }
 
       /// result = target; target = newValue
@@ -48,6 +84,9 @@ namespace YAML
       }
 
 
+      /** splits path at offset, 
+          returning everything left of [offset], assigning everything right of it to \c path. 
+      */
       path_arg SplitAt(path_arg & path, size_t offset)
       {
          if (offset == 0)
@@ -61,6 +100,7 @@ namespace YAML
          return result;
       }
 
+      /// converts path_arg to a n unsigned integer; if it is not a valid index, nullopt is returned
       std::optional<size_t> AsIndex(path_arg p)
       {
          size_t value = 0;
@@ -81,25 +121,6 @@ namespace YAML
          return value;
       }
 
-      // ----- PathException
-      inline std::string const & PathException::What() const
-      {
-         if (!m_what.length())
-            return m_what;
-         switch (m_error)
-         {
-         case EPathError::None:   return m_what = "OK";
-         case EPathError::InvalidToken:
-            return m_what = (std::stringstream() << "Invalid Token at position " << m_offset << ": " << m_value).str();
-
-         case EPathError::IndexExpected:
-            return m_what = (std::stringstream() << "Index expected at position " << m_offset << ": " << m_value).str();
-
-         default:
-            return m_what = (std::stringstream() << "Undefined exception #" << (int)m_error << " at offset " << m_offset << ": " << m_value).str();
-         }
-      }
-
       // ----- TokenScanner
       EToken GetSingleCharToken(char c, std::initializer_list<std::pair<char, EToken>> values)
       {
@@ -115,21 +136,19 @@ namespace YAML
          // Generate error when ValidTokens are specified:
          if (ValidTokens != 0 && !BitsContain(ValidTokens, tok))
          {
-            m_curException = PathException(EPathError::InvalidToken, NextOffset(), std::string(p));
-            if (ThrowOnError)
-               ThrowDerived();
-            else
-            {
-               SkipWS();
-               m_value = std::move(p);
-               return m_token = EToken::Invalid;
-            }
+            SkipWS();
+            SetError(EPathError::InvalidToken);
+
+            // if that doesn't throw...
+            assert(m_token == EToken::Invalid);
+            m_value = std::move(p);
+            return m_token;
          }
 
          m_token = tok;
          m_value = std::move(p);
 
-         /* skipping whitespacew after token, so that if this was the last token,
+         /* skipping whitespace after token, so that if this was the last token,
             we get to the end of the string and operator bool becomes false */
          SkipWS();
          return tok;
@@ -186,27 +205,13 @@ namespace YAML
       }
 
 
-      // TODO: replace with pre-parse offset
-
       inline void TokenScanner::SetError(EPathError error)
       {
          assert(error != EPathError::None);
          m_token = EToken::Invalid;
-         m_curException = PathException(error, NextOffset(), std::string(Value()));
+         m_curException = PathException(error, ScanOffset(), std::string(Value()));
          if (ThrowOnError)
-            ThrowDerived();
-      }
-
-      inline void TokenScanner::ThrowDerived()
-      {
-         if (!m_curException)
-            return;
-
-         switch (m_curException->Error())
-         {
-         case EPathError::InvalidToken: throw PathInvalidTokenException(m_curException->Offset(), m_curException->Value());
-         default: throw *m_curException;
-         }
+            m_curException->ThrowDerived();
       }
 
    } // YamlPathDetail
@@ -233,20 +238,17 @@ namespace YAML
             case EToken::OpenBracket:
                assert(ctx == EContext::Base); 
                ctx = EContext::Index;
-               if (ValidTokens)
-                  ValidTokens = BitsOf({ EToken::UnquotedIdentifier });
+               ValidTokens = BitsOf({ EToken::UnquotedIdentifier });
                continue;
 
             case EToken::CloseBracket:
                assert(ctx == EContext::Index);
                ctx = EContext::Base;
-               if (ValidTokens)
-                  ValidTokens = TokenScanner::ValidTokensAtBase;
+               ValidTokens = TokenScanner::ValidTokensAtBase;
                continue;
 
             case EToken::Period:
-               if (ValidTokens)
-                  ValidTokens = BitsOf({ EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier});
+               ValidTokens = BitsOf({ EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier});
                continue;
 
             case EToken::UnquotedIdentifier:
@@ -256,8 +258,7 @@ namespace YAML
                   if (!index)
                      return SetError(EPathError::IndexExpected);
 
-                  if (ValidTokens)
-                     ValidTokens = BitsOf({ EToken::CloseBracket });
+                  ValidTokens = BitsOf({ EToken::CloseBracket });
                   if (!node)
                      continue;
 
@@ -282,8 +283,7 @@ namespace YAML
 
             case EToken::QuotedIdentifier:
                assert(ctx == EContext::Base);
-               if (ValidTokens)
-                  ValidTokens = BitsOf({ EToken::Period, EToken::OpenBracket, EToken::None });
+               ValidTokens = BitsOf({ EToken::Period, EToken::OpenBracket, EToken::None });
                if (!node)
                   continue;
 
@@ -308,12 +308,16 @@ namespace YAML
       Select(EToken::None, path_arg());
    }
 
-   EPathError PathValidate(path_arg p)
+   /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
+   */
+   EPathError PathValidate(path_arg p, size_t * scanOffs)
    {
       TokenScanner scan(p);
       scan.ThrowOnError = false;
       scan.ValidTokens = TokenScanner::ValidTokensAtStart;
       scan.Resolve(nullptr);
+      if (scanOffs)
+         *scanOffs = scan.ScanOffset();
       return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
    }
 
@@ -329,6 +333,6 @@ namespace YAML
    Node PathAt(YAML::Node node, path_arg path)
    {
       PathResolve(node, path);
-      return path.length() ? NullNode() : node;
+      return path.length() ? UndefinedNode() : node;
    }
 } // namespace YAML

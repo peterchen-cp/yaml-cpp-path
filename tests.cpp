@@ -67,7 +67,7 @@ TEST_CASE("Internal: TokenScanner")
       path_arg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
       TokenScanner scan(scanMe);
       scan.ThrowOnError = false;
-      scan.ValidTokens = 0;
+      scan.ValidTokens = -1;
       CHECK(scan);
       CHECK(scan.Next() == EToken::UnquotedIdentifier); 
       CHECK(scan.Value() == "a");

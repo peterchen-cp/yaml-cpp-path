@@ -43,8 +43,47 @@ namespace YAML
       NodeNotFound,
    };
 
-   EPathError PathValidate(path_arg p);
-   Node PathAt(YAML::Node node, path_arg path);
-   void PathResolve(YAML::Node & node, path_arg & path);
-   void PathResolve(YAML::Node & node, path_arg & path);
+   EPathError PathValidate(path_arg p, size_t * scanOffs = 0);
+   Node PathAt(Node node, path_arg path);
+   void PathResolve(Node & node, path_arg & path);
+   void PathResolve(Node & node, path_arg & path);
+
+   class PathException : public std::exception
+   {
+   public:
+
+      PathException(EPathError error, size_t offs = 0, std::string value = std::string()) : m_error(error), m_offset(offs), m_value(value) {}
+
+      EPathError Error() const { return m_error; }
+      size_t Offset() const { return m_offset; }
+      auto Value() const { return m_value; }
+
+      char const * what() const override { return What().c_str(); }
+      std::string const & What() const;
+
+      void ThrowDerived();
+
+   private:
+      EPathError m_error = EPathError::None;
+      std::string m_value;
+      size_t m_offset = 0;
+      mutable std::string m_what;
+   };
+
+   namespace YamlPathDetail
+   {
+      template <EPathError error> 
+      class PathExceptionT : public PathException
+      {
+         public: 
+            PathExceptionT(size_t offset, std::string value) : PathException(error, offset, value) {}
+      };
+   }
+
+   using PathInternalException = YamlPathDetail::PathExceptionT<EPathError::Internal>;
+   using PathInvalidTokenException = YamlPathDetail::PathExceptionT<EPathError::InvalidToken>;
+   using PathIndexExpectedException = YamlPathDetail::PathExceptionT<EPathError::IndexExpected>;
+   using PathInvalidIndexException = YamlPathDetail::PathExceptionT<EPathError::InvalidIndex>;
+   using PathInvalidNodeTypeException = YamlPathDetail::PathExceptionT<EPathError::InvalidNodeType>;
+   using PathNodeNotFoundException = YamlPathDetail::PathExceptionT<EPathError::NodeNotFound>;
 }

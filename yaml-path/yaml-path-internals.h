@@ -24,9 +24,7 @@ SOFTWARE.
 
 #pragma once
 
-/* This exposes yaml-path detaisl to make them accessible to tests. 
-   The part after "// ----- Implementation"  can be inserted into yaml-path.cpp 
-   instead of the include.
+/* This exposes yaml-path details to make them accessible to tests. 
 */
 
 
@@ -49,39 +47,6 @@ namespace YAML
       template<typename TBits, typename TValue>
       bool constexpr BitsContain(TBits bits, TValue v);
 
-      class PathException : public std::exception
-      {
-      public:
-
-         PathException(EPathError error, size_t offs = 0, std::string value = std::string()) : m_error(error), m_offset(offs), m_value(value) {}
-
-         EPathError Error() const { return m_error;  }
-         size_t Offset() const { return m_offset;  }
-         auto Value() const { return m_value;  }
-
-         char const * what() const override { return What().c_str(); }
-
-         std::string const & What() const;
-
-      private:
-         EPathError m_error = EPathError::None;
-         std::string m_value;
-         size_t m_offset = 0;
-         mutable std::string m_what;
-      };
-
-      class PathInvalidTokenException : public PathException
-      {
-      public:
-         PathInvalidTokenException(size_t offset, std::string token) : PathException(EPathError::InvalidToken, offset, token) {}
-      };
-
-      class PathIndexExpectedException : public PathException
-      {
-      public:
-         PathIndexExpectedException(size_t offset, std::string token) : PathException(EPathError::IndexExpected, offset, token) {}
-      };
-
       enum class EToken
       {
          Invalid = -1,
@@ -91,17 +56,15 @@ namespace YAML
          OpenBracket,
          CloseBracket,
          Period,
-
-         // ...
       };
 
       EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
 
       class TokenScanner
       {
-         path_arg    m_all;      // original path (to get the offset)
-         path_arg    m_rpath;    // path remainder
-         EToken      m_token;
+         path_arg    m_all;      // original path (just to to get the offset)
+         path_arg    m_rpath;
+         EToken      m_token = EToken::None;
          path_arg    m_value;
 
          EToken Select(EToken tok, path_arg p);
@@ -116,17 +79,15 @@ namespace YAML
 
          uint64_t ValidTokens = 0;
          bool     ThrowOnError = true;
-         auto const & CurrentException() const { return m_curException; }  ///< exception, 
+         auto const & CurrentException() const { return m_curException; }  ///< current error
          auto Right() const { return m_rpath;  }                           ///< remainder (unscanned part)
+         size_t ScanOffset() const { return m_all.length() - m_rpath.length();  }
 
          EToken Next();
          path_arg Value() const { return m_value;  }
          EToken Token() const { return m_token;  }
 
-         size_t NextOffset() const { return m_all.size() - m_rpath.size();  }    // TODO: replace with pre-parse offset
          void SetError(EPathError error);
-
-         void ThrowDerived();
 
          void Resolve(Node * node);
 
