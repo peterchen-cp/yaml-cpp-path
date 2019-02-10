@@ -132,10 +132,10 @@ namespace YAML
       }
 
 
-      EToken TokenScanner::Select(EToken tok, path_arg p)
+      EToken TokenScanner::Select(EToken tok, path_arg p, uint64_t validTokens)
       {
          // Generate error when ValidTokens are specified:
-         if (ValidTokens != 0 && !BitsContain(ValidTokens, tok))
+         if (!BitsContain(validTokens, tok))
          {
             SkipWS();
             SetError(EPathError::InvalidToken);
@@ -163,13 +163,12 @@ namespace YAML
       inline TokenScanner::TokenScanner(path_arg p) : m_rpath(p), m_all(p)
       {
          SkipWS();
-         ValidTokens = ValidTokensAtStart;
       }
 
-      EToken TokenScanner::Next()
+      EToken TokenScanner::NextToken(uint64_t validTokens)
       {
          if (m_rpath.empty())
-            return Select(EToken::None, path_arg());
+            return Select(EToken::None, path_arg(), validTokens);
 
          if (m_curException)
             return m_token;
@@ -183,16 +182,16 @@ namespace YAML
             });
 
          if (t != EToken::None)
-            return Select(t, SplitAt(m_rpath, 1));
+            return Select(t, SplitAt(m_rpath, 1), validTokens);
 
          // quoted token
          if (head == '\'' || head == '"')
          {
             size_t end = m_rpath.find(m_rpath[0], 1);
             if (end == std::string::npos)
-               return Select(EToken::Invalid, path_arg());
+               return Select(EToken::Invalid, path_arg(), validTokens);
 
-            return Select(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1));
+            return Select(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1), validTokens);
          }
 
          // unquoted token
@@ -202,7 +201,7 @@ namespace YAML
             return SetError(EPathError::InvalidToken), m_token;
          }
 
-         return Select(EToken::UnquotedIdentifier, result);
+         return Select(EToken::UnquotedIdentifier, result, validTokens);
       }
 
 
@@ -227,9 +226,11 @@ namespace YAML
          Index,
       } ctx = EContext::Base;
 
+      uint64_t validTokens = ValidTokensAtStart;
+
       while (*this)
       {
-         auto token = Next();
+         auto token = NextToken(validTokens);
          switch (token)
          {
             case EToken::None:
@@ -237,19 +238,19 @@ namespace YAML
                return;
 
             case EToken::OpenBracket:
-               assert(ctx == EContext::Base); 
+               assert(ctx == EContext::Base);
                ctx = EContext::Index;
-               ValidTokens = BitsOf({ EToken::UnquotedIdentifier });
+               validTokens = BitsOf({ EToken::UnquotedIdentifier });
                continue;
 
             case EToken::CloseBracket:
                assert(ctx == EContext::Index);
                ctx = EContext::Base;
-               ValidTokens = TokenScanner::ValidTokensAtBase;
+               validTokens = TokenScanner::ValidTokensAtBase;
                continue;
 
             case EToken::Period:
-               ValidTokens = BitsOf({ EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier});
+               validTokens = BitsOf({ EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
                continue;
 
             case EToken::UnquotedIdentifier:
@@ -259,7 +260,7 @@ namespace YAML
                   if (!index)
                      return SetError(EPathError::IndexExpected);
 
-                  ValidTokens = BitsOf({ EToken::CloseBracket });
+                  validTokens = BitsOf({ EToken::CloseBracket });
                   if (!node)
                      continue;
 
@@ -284,7 +285,7 @@ namespace YAML
 
             case EToken::QuotedIdentifier:
                assert(ctx == EContext::Base);
-               ValidTokens = BitsOf({ EToken::Period, EToken::OpenBracket, EToken::None });
+               validTokens = BitsOf({ EToken::Period, EToken::OpenBracket, EToken::None });
                if (!node)
                   continue;
 
@@ -306,7 +307,7 @@ namespace YAML
          }
 
       }
-      Select(EToken::None, path_arg());
+      Select(EToken::None, path_arg(), validTokens);
    }
 
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
@@ -315,7 +316,6 @@ namespace YAML
    {
       TokenScanner scan(p);
       scan.ThrowOnError = false;
-      scan.ValidTokens = TokenScanner::ValidTokensAtStart;
       scan.Resolve(nullptr);
       if (scanOffs)
          *scanOffs = scan.ScanOffset();
@@ -325,7 +325,6 @@ namespace YAML
    void PathResolve(YAML::Node & node, path_arg & path)
    {
       TokenScanner scan(path);
-      scan.ValidTokens = TokenScanner::ValidTokensAtStart;
       scan.ThrowOnError = false;
       scan.Resolve(&node);
       path = scan.Right();

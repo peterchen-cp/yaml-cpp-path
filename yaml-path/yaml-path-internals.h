@@ -67,7 +67,7 @@ namespace YAML
          EToken      m_token = EToken::None;
          path_arg    m_value;
 
-         EToken Select(EToken tok, path_arg p);
+         EToken Select(EToken tok, path_arg p, uint64_t validTokens);
          void SkipWS();
 
          std::optional<PathException> m_curException;
@@ -77,13 +77,12 @@ namespace YAML
 
          explicit operator bool() const { return !m_rpath.empty() && m_token != EToken::Invalid && !m_curException; }
 
-         uint64_t ValidTokens = 0;
          bool     ThrowOnError = true;
          auto const & CurrentException() const { return m_curException; }  ///< current error
          auto Right() const { return m_rpath;  }                           ///< remainder (unscanned part)
          size_t ScanOffset() const { return m_all.length() - m_rpath.length();  }
+         EToken NextToken(uint64_t validTokens = -1);
 
-         EToken Next();
          path_arg Value() const { return m_value;  }
          EToken Token() const { return m_token;  }
 
