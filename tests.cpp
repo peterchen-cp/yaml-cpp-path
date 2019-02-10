@@ -67,33 +67,32 @@ TEST_CASE("Internal: TokenScanner")
       path_arg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
       TokenScanner scan(scanMe);
       scan.ThrowOnError = false;
-      scan.ValidTokens = -1;
       CHECK(scan);
-      CHECK(scan.Next() == EToken::UnquotedIdentifier); 
+      CHECK(scan.NextToken() == EToken::UnquotedIdentifier); 
       CHECK(scan.Value() == "a");
 
       CHECK(scan);
-      CHECK(scan.Next() == EToken::Period);
-      CHECK(scan.Next() == EToken::UnquotedIdentifier);
+      CHECK(scan.NextToken() == EToken::Period);
+      CHECK(scan.NextToken() == EToken::UnquotedIdentifier);
       CHECK(scan.Value() == "beta");
 
-      CHECK(scan.Next() == EToken::Period);
-      CHECK(scan.Next() == EToken::QuotedIdentifier);
+      CHECK(scan.NextToken() == EToken::Period);
+      CHECK(scan.NextToken() == EToken::QuotedIdentifier);
       CHECK(scan.Value() == "a b[c]");
 
-      CHECK(scan.Next() == EToken::Period);
-      CHECK(scan.Next() == EToken::QuotedIdentifier);
+      CHECK(scan.NextToken() == EToken::Period);
+      CHECK(scan.NextToken() == EToken::QuotedIdentifier);
       CHECK(scan.Value() == "a.b");
 
-      CHECK(scan.Next() == EToken::Period);
-      CHECK(scan.Next() == EToken::OpenBracket);
-      CHECK(scan.Next() == EToken::CloseBracket);
+      CHECK(scan.NextToken() == EToken::Period);
+      CHECK(scan.NextToken() == EToken::OpenBracket);
+      CHECK(scan.NextToken() == EToken::CloseBracket);
 
-      CHECK(scan.Next() == EToken::Period);
-      CHECK(scan.Next() == EToken::Invalid);
+      CHECK(scan.NextToken() == EToken::Period);
+      CHECK(scan.NextToken() == EToken::Invalid);
 
       CHECK(!scan);  // at end when invalid
-      CHECK(scan.Next() == EToken::Invalid); // remains at "invalid"
+      CHECK(scan.NextToken() == EToken::Invalid); // remains at "invalid"
    }
 }
 
