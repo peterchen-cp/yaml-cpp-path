@@ -38,10 +38,11 @@ namespace YAML
       switch (m_error)
       {
       case EPathError::None:   return m_what = "OK";
+
       case EPathError::InvalidToken:
          return m_what = (std::stringstream() << "Invalid Token at position " << m_offset << ": " << m_value).str();
 
-      case EPathError::IndexExpected:
+      case EPathError::InvalidIndex:
          return m_what = (std::stringstream() << "Index expected at position " << m_offset << ": " << m_value).str();
 
       default:
@@ -56,10 +57,7 @@ namespace YAML
          case EPathError::None: assert(false);  return;
          case EPathError::Internal: throw PathInternalException(m_offset, m_value);
          case EPathError::InvalidToken: throw PathInvalidTokenException(m_offset, m_value);
-         case EPathError::IndexExpected: throw PathIndexExpectedException(m_offset, m_value);
          case EPathError::InvalidIndex: throw PathInvalidIndexException(m_offset, m_value);
-         case EPathError::InvalidNodeType: throw PathInvalidNodeTypeException(m_offset, m_value);
-         case EPathError::NodeNotFound: throw PathNodeNotFoundException(m_offset, m_value);
          default: throw *this;
       }
    }
@@ -132,20 +130,9 @@ namespace YAML
       }
 
 
-      Token const & TokenScanner::SelectToken(EToken id, path_arg p, uint64_t validTokens)
+      Token const & TokenScanner::SetToken(EToken id, path_arg p)
       {
          // Generate error when ValidTokens are specified:
-         if (!BitsContain(validTokens, id))
-         {
-            SkipWS();
-            SetError(EPathError::InvalidToken);
-
-            // if that doesn't throw...
-            assert(m_curToken.id == EToken::Invalid);
-            m_curToken.value = std::move(p);
-            return m_curToken;
-         }
-
          m_curToken = { id, std::move(p) };
 
          /* skipping whitespace after token, so that if this was the last token,
@@ -164,10 +151,10 @@ namespace YAML
          SkipWS();
       }
 
-      Token const & TokenScanner::NextToken(uint64_t validTokens)
+      Token const & TokenScanner::NextToken()
       {
          if (m_rpath.empty())
-            return SelectToken(EToken::None, path_arg(), validTokens);
+            return SetToken(EToken::None, path_arg());
 
          if (m_curException)
             return m_curToken;
@@ -181,141 +168,116 @@ namespace YAML
             });
 
          if (t != EToken::None)
-            return SelectToken(t, SplitAt(m_rpath, 1), validTokens);
+            return SetToken(t, SplitAt(m_rpath, 1));
 
          // quoted token
          if (head == '\'' || head == '"')
          {
             size_t end = m_rpath.find(m_rpath[0], 1);
             if (end == std::string::npos)
-               return SelectToken(EToken::Invalid, path_arg(), validTokens);
+               return SetToken(EToken::Invalid, path_arg());
 
-            return SelectToken(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1), validTokens);
+            return SetToken(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1));
          }
 
          // unquoted token
          auto result = Split(m_rpath, [](char c) { return !isspace(c) && !ispunct(c); });
          if (result.empty())
-         {
             return SetError(EPathError::InvalidToken), m_curToken;
-         }
 
-         return SelectToken(EToken::UnquotedIdentifier, result, validTokens);
+         return SetToken(EToken::UnquotedIdentifier, result);
       }
 
-
-      inline void TokenScanner::SetError(EPathError error)
+      EPathError TokenScanner::SetError(EPathError error)
       {
          assert(error != EPathError::None);
          m_curException = PathException(error, ScanOffset(), std::string(m_curToken.value));
          m_curToken = { EToken::Invalid };
-         if (ThrowOnError)
-            m_curException->ThrowDerived();
+         SetSelector(ESelector::Invalid, ArgNull{});
+         return error;
       }
+
+      bool TokenScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
+      {
+         if (!m_tokenPending)
+            NextToken();
+         m_tokenPending = false;
+
+         if (BitsContain(validTokens, m_curToken.id))
+            return true;
+
+         SetError(error);
+         return false;
+      }
+
+
+
+      ESelector TokenScanner::NextSelector()
+      {
+         if (m_rpath.empty())
+            return ESelector::None;
+
+         if (m_curException)
+            return ESelector::Invalid;
+
+         if (!NextSelectorToken(m_rpath.size() == m_all.size() ? ValidTokensAtStart : ValidTokensAtBase))
+            return ESelector::Invalid;
+
+         switch (m_curToken.id)
+         {
+            case EToken::QuotedIdentifier:
+            case EToken::UnquotedIdentifier:
+            {
+               SetSelector(ESelector::Key, ArgKey{ m_curToken.value });
+
+               if (!NextSelectorToken(BitsOf({ EToken::None, EToken::Period, EToken::OpenBracket })))
+                  return ESelector::Invalid;
+
+               if (m_curToken.id == EToken::OpenBracket)
+                  m_tokenPending = true;  // push back
+
+               return m_selector;
+            }
+
+            case EToken::OpenBracket:
+            {
+               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier }), EPathError::InvalidIndex))
+                  return ESelector::Invalid;
+
+               auto index = AsIndex(m_curToken.value);
+               if (!index)
+                  return SetError(EPathError::InvalidIndex), ESelector::Invalid;
+
+               if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+                  return ESelector::Invalid;
+
+               if (!NextSelectorToken(BitsOf({ EToken::None, EToken::Period, EToken::OpenBracket })))
+                  return ESelector::Invalid;
+
+               if (m_curToken.id == EToken::OpenBracket)
+                  m_tokenPending = true;  // push back
+
+               return SetSelector(ESelector::Index, ArgIndex{ *index });
+            }
+
+
+
+         }
+         return ESelector::Invalid;
+      }
+
+
 
    } // YamlPathDetail
 
-   using namespace YamlPathDetail;
-
-   void TokenScanner::Resolve(YAML::Node * node)
-   {
-      enum class EContext
-      {
-         Base,
-         Index,
-      } ctx = EContext::Base;
-
-      uint64_t validTokens = ValidTokensAtStart;
-
-      while (*this)
-      {
-         auto token = NextToken(validTokens);
-         switch (token.id)
-         {
-            case EToken::None:
-            case EToken::Invalid:
-               return;
-
-            case EToken::OpenBracket:
-               assert(ctx == EContext::Base);
-               ctx = EContext::Index;
-               validTokens = BitsOf({ EToken::UnquotedIdentifier });
-               continue;
-
-            case EToken::CloseBracket:
-               assert(ctx == EContext::Index);
-               ctx = EContext::Base;
-               validTokens = TokenScanner::ValidTokensAtBase;
-               continue;
-
-            case EToken::Period:
-               validTokens = BitsOf({ EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
-               continue;
-
-            case EToken::UnquotedIdentifier:
-               if (ctx == EContext::Index)
-               {
-                  auto index = AsIndex(token.value);
-                  if (!index)
-                     return SetError(EPathError::IndexExpected);
-
-                  validTokens = BitsOf({ EToken::CloseBracket });
-                  if (!node)
-                     continue;
-
-                  if (node->IsSequence())
-                  {
-                     if (*index >= node->size())
-                        return SetError(EPathError::InvalidIndex);
-                     node->reset((*node)[*index]);
-                     continue;
-                  }
-
-                  if (node->IsScalar())
-                  {
-                     if (*index != 0)
-                        return SetError(EPathError::InvalidIndex);
-                     // node remains the same
-                     continue;
-                  }
-                  return SetError(EPathError::InvalidNodeType);
-               }
-               // fall through
-
-            case EToken::QuotedIdentifier:
-               assert(ctx == EContext::Base);
-               validTokens = BitsOf({ EToken::Period, EToken::OpenBracket, EToken::None });
-               if (!node)
-                  continue;
-
-               if (!*node)
-                  continue;
-
-               if (node->IsMap())
-               {
-                  Node newNode = (*node)[std::string(token.value)];
-                  if (!newNode)
-                     return SetError(EPathError::NodeNotFound);
-                  node->reset(newNode);
-               }
-               continue;
-
-            default:
-               assert(false);  // all cases should have been covered. This is just a simple ad-hoc parser
-               return SetError(EPathError::Internal);
-         }
-
-      }
-      SelectToken(EToken::None, path_arg(), validTokens);
-   }
 
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
    */
    EPathError PathValidate(path_arg p, size_t * scanOffs)
    {
-      TokenScanner scan(p);
-      scan.ThrowOnError = false;
-      scan.Resolve(nullptr);
+      YamlPathDetail::TokenScanner scan(p);
+      while (scan)
+         scan.NextSelector();
       if (scanOffs)
          *scanOffs = scan.ScanOffset();
       return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
@@ -323,15 +285,50 @@ namespace YAML
 
    void PathResolve(YAML::Node & node, path_arg & path)
    {
+      using namespace YamlPathDetail;
       TokenScanner scan(path);
-      scan.ThrowOnError = false;
-      scan.Resolve(&node);
+      while (scan && node)
+      {
+         path = scan.Right();
+         switch (scan.NextSelector())
+         {
+            case ESelector::Key:
+            {
+               if (!node.IsMap())
+                  return;
+
+               std::string key{ std::get<ArgKey>(scan.SelectorData()).key };
+               node.reset(node[key]);
+               continue;
+            }
+
+            case ESelector::Index:
+            {
+               size_t index = std::get<ArgIndex>(scan.SelectorData()).index;
+               if (node.IsScalar())
+               {
+                  if (index != 0)   // for scalar node, [0] sticks to the node
+                     node.reset(UndefinedNode());
+                  continue;
+               }
+               if (node.IsSequence())
+               {
+                  node.reset(node[index]);
+                  continue;
+               }
+               return;     // cannot go in
+            }
+
+            default:
+               assert(false);    // no other selectors supported right now
+         }
+      }
       path = scan.Right();
    }
 
    Node PathAt(YAML::Node node, path_arg path)
    {
       PathResolve(node, path);
-      return path.length() ? UndefinedNode() : node;
+      return path.length() ? YamlPathDetail::UndefinedNode() : node;
    }
 } // namespace YAML

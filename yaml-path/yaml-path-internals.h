@@ -31,6 +31,8 @@ SOFTWARE.
 #include "yaml-path.h"
 #include <optional>
 #include <sstream>
+#include <variant>
+#include <vector>
 
 namespace YAML
 {
@@ -66,6 +68,21 @@ namespace YAML
          path_arg value;
       };
 
+      enum class ESelector
+      {
+         Invalid = -1,
+         None = 0,
+         Key,
+         Index,
+      };
+
+      struct ArgNull {};
+      struct ArgKey { path_arg key; };
+      struct ArgIndex { size_t index; };
+
+      using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex>;
+
+
       class TokenScanner
       {
       public:
@@ -73,17 +90,31 @@ namespace YAML
       private:
          path_arg    m_rpath;    // path to be rendered
          Token       m_curToken;
+
+         ESelector      m_selector = ESelector::None;
+         tSelectorData  m_selectorData;
+         bool           m_tokenPending = false;
+
          std::optional<PathException> m_curException;
 
          path_arg    m_all;      // original path (just to to get the offset)
 
-         Token const & SelectToken(EToken id, path_arg p, uint64_t validTokens);
-         void SetError(EPathError error);
+         Token const & SetToken(EToken id, path_arg p);
+
+         template<typename TArg>
+         ESelector SetSelector(ESelector selector, TArg arg)
+         {
+            m_selector = selector;
+            m_selectorData = std::move(arg);
+            return m_selector;
+         }
+
          void SkipWS();
+         EPathError SetError(EPathError error);
+
+         bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
-         bool     ThrowOnError = true;
-
          TokenScanner(path_arg p);
 
          explicit operator bool() const { return !m_rpath.empty() && m_curToken.id != EToken::Invalid && !m_curException; }
@@ -92,10 +123,14 @@ namespace YAML
          auto Right() const { return m_rpath; }                           ///< remainder (unscanned part)
          size_t ScanOffset() const { return m_all.length() - m_rpath.length(); }
 
-         Token const & NextToken(uint64_t validTokens = -1);
+         // -----token-level scanner
+         Token const & NextToken();
          Token const & Token() const { return m_curToken; }
 
-         void Resolve(Node * node);
+         // -----selector-level scanner
+         ESelector NextSelector();
+         ESelector Selector() const { return m_selector; }
+         auto const & SelectorData()  const { return m_selectorData; }
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
          inline static const uint64_t ValidTokensAtBase = ValidTokensAtStart | BitsOf({ EToken::Period });

@@ -42,10 +42,7 @@ namespace YAML
       None,
       Internal,
       InvalidToken,
-      IndexExpected,
       InvalidIndex,
-      InvalidNodeType,
-      NodeNotFound,
    };
 
 
@@ -83,8 +80,5 @@ namespace YAML
 
    using PathInternalException = YamlPathDetail::PathExceptionT<EPathError::Internal>;
    using PathInvalidTokenException = YamlPathDetail::PathExceptionT<EPathError::InvalidToken>;
-   using PathIndexExpectedException = YamlPathDetail::PathExceptionT<EPathError::IndexExpected>;
    using PathInvalidIndexException = YamlPathDetail::PathExceptionT<EPathError::InvalidIndex>;
-   using PathInvalidNodeTypeException = YamlPathDetail::PathExceptionT<EPathError::InvalidNodeType>;
-   using PathNodeNotFoundException = YamlPathDetail::PathExceptionT<EPathError::NodeNotFound>;
 }
