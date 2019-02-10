@@ -68,31 +68,31 @@ TEST_CASE("Internal: TokenScanner")
       TokenScanner scan(scanMe);
       scan.ThrowOnError = false;
       CHECK(scan);
-      CHECK(scan.NextToken() == EToken::UnquotedIdentifier); 
-      CHECK(scan.Value() == "a");
+      CHECK(scan.NextToken().id == EToken::UnquotedIdentifier); 
+      CHECK(scan.Token().value == "a");
 
       CHECK(scan);
-      CHECK(scan.NextToken() == EToken::Period);
-      CHECK(scan.NextToken() == EToken::UnquotedIdentifier);
-      CHECK(scan.Value() == "beta");
+      CHECK(scan.NextToken().id == EToken::Period);
+      CHECK(scan.NextToken().id == EToken::UnquotedIdentifier);
+      CHECK(scan.Token().value == "beta");
 
-      CHECK(scan.NextToken() == EToken::Period);
-      CHECK(scan.NextToken() == EToken::QuotedIdentifier);
-      CHECK(scan.Value() == "a b[c]");
+      CHECK(scan.NextToken().id == EToken::Period);
+      CHECK(scan.NextToken().id == EToken::QuotedIdentifier);
+      CHECK(scan.Token().value== "a b[c]");
 
-      CHECK(scan.NextToken() == EToken::Period);
-      CHECK(scan.NextToken() == EToken::QuotedIdentifier);
-      CHECK(scan.Value() == "a.b");
+      CHECK(scan.NextToken().id == EToken::Period);
+      CHECK(scan.NextToken().id == EToken::QuotedIdentifier);
+      CHECK(scan.Token().value == "a.b");
 
-      CHECK(scan.NextToken() == EToken::Period);
-      CHECK(scan.NextToken() == EToken::OpenBracket);
-      CHECK(scan.NextToken() == EToken::CloseBracket);
+      CHECK(scan.NextToken().id == EToken::Period);
+      CHECK(scan.NextToken().id == EToken::OpenBracket);
+      CHECK(scan.NextToken().id == EToken::CloseBracket);
 
-      CHECK(scan.NextToken() == EToken::Period);
-      CHECK(scan.NextToken() == EToken::Invalid);
+      CHECK(scan.NextToken().id == EToken::Period);
+      CHECK(scan.NextToken().id == EToken::Invalid);
 
       CHECK(!scan);  // at end when invalid
-      CHECK(scan.NextToken() == EToken::Invalid); // remains at "invalid"
+      CHECK(scan.NextToken().id == EToken::Invalid); // remains at "invalid"
    }
 }
 

@@ -132,27 +132,26 @@ namespace YAML
       }
 
 
-      EToken TokenScanner::Select(EToken tok, path_arg p, uint64_t validTokens)
+      Token const & TokenScanner::SelectToken(EToken id, path_arg p, uint64_t validTokens)
       {
          // Generate error when ValidTokens are specified:
-         if (!BitsContain(validTokens, tok))
+         if (!BitsContain(validTokens, id))
          {
             SkipWS();
             SetError(EPathError::InvalidToken);
 
             // if that doesn't throw...
-            assert(m_token == EToken::Invalid);
-            m_value = std::move(p);
-            return m_token;
+            assert(m_curToken.id == EToken::Invalid);
+            m_curToken.value = std::move(p);
+            return m_curToken;
          }
 
-         m_token = tok;
-         m_value = std::move(p);
+         m_curToken = { id, std::move(p) };
 
          /* skipping whitespace after token, so that if this was the last token,
             we get to the end of the string and operator bool becomes false */
          SkipWS();
-         return tok;
+         return m_curToken;
       }
 
       void TokenScanner::SkipWS()
@@ -165,13 +164,13 @@ namespace YAML
          SkipWS();
       }
 
-      EToken TokenScanner::NextToken(uint64_t validTokens)
+      Token const & TokenScanner::NextToken(uint64_t validTokens)
       {
          if (m_rpath.empty())
-            return Select(EToken::None, path_arg(), validTokens);
+            return SelectToken(EToken::None, path_arg(), validTokens);
 
          if (m_curException)
-            return m_token;
+            return m_curToken;
 
          // single-char special tokens
          char head = m_rpath[0];
@@ -182,34 +181,34 @@ namespace YAML
             });
 
          if (t != EToken::None)
-            return Select(t, SplitAt(m_rpath, 1), validTokens);
+            return SelectToken(t, SplitAt(m_rpath, 1), validTokens);
 
          // quoted token
          if (head == '\'' || head == '"')
          {
             size_t end = m_rpath.find(m_rpath[0], 1);
             if (end == std::string::npos)
-               return Select(EToken::Invalid, path_arg(), validTokens);
+               return SelectToken(EToken::Invalid, path_arg(), validTokens);
 
-            return Select(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1), validTokens);
+            return SelectToken(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1), validTokens);
          }
 
          // unquoted token
          auto result = Split(m_rpath, [](char c) { return !isspace(c) && !ispunct(c); });
          if (result.empty())
          {
-            return SetError(EPathError::InvalidToken), m_token;
+            return SetError(EPathError::InvalidToken), m_curToken;
          }
 
-         return Select(EToken::UnquotedIdentifier, result, validTokens);
+         return SelectToken(EToken::UnquotedIdentifier, result, validTokens);
       }
 
 
       inline void TokenScanner::SetError(EPathError error)
       {
          assert(error != EPathError::None);
-         m_token = EToken::Invalid;
-         m_curException = PathException(error, ScanOffset(), std::string(Value()));
+         m_curException = PathException(error, ScanOffset(), std::string(m_curToken.value));
+         m_curToken = { EToken::Invalid };
          if (ThrowOnError)
             m_curException->ThrowDerived();
       }
@@ -231,7 +230,7 @@ namespace YAML
       while (*this)
       {
          auto token = NextToken(validTokens);
-         switch (token)
+         switch (token.id)
          {
             case EToken::None:
             case EToken::Invalid:
@@ -256,7 +255,7 @@ namespace YAML
             case EToken::UnquotedIdentifier:
                if (ctx == EContext::Index)
                {
-                  auto index = AsIndex(Value());
+                  auto index = AsIndex(token.value);
                   if (!index)
                      return SetError(EPathError::IndexExpected);
 
@@ -294,7 +293,7 @@ namespace YAML
 
                if (node->IsMap())
                {
-                  Node newNode = (*node)[std::string(Value())];
+                  Node newNode = (*node)[std::string(token.value)];
                   if (!newNode)
                      return SetError(EPathError::NodeNotFound);
                   node->reset(newNode);
@@ -307,7 +306,7 @@ namespace YAML
          }
 
       }
-      Select(EToken::None, path_arg(), validTokens);
+      SelectToken(EToken::None, path_arg(), validTokens);
    }
 
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid

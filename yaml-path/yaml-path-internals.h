@@ -50,7 +50,7 @@ namespace YAML
       enum class EToken
       {
          Invalid = -1,
-         None  = 0,
+         None = 0,
          QuotedIdentifier,
          UnquotedIdentifier,
          OpenBracket,
@@ -60,33 +60,40 @@ namespace YAML
 
       EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
 
+      struct Token
+      {
+         EToken   id = EToken::None;
+         path_arg value;
+      };
+
       class TokenScanner
       {
-         path_arg    m_all;      // original path (just to to get the offset)
-         path_arg    m_rpath;
-         EToken      m_token = EToken::None;
-         path_arg    m_value;
+      public:
 
-         EToken Select(EToken tok, path_arg p, uint64_t validTokens);
-         void SkipWS();
-
+      private:
+         path_arg    m_rpath;    // path to be rendered
+         Token       m_curToken;
          std::optional<PathException> m_curException;
 
+         path_arg    m_all;      // original path (just to to get the offset)
+
+         Token const & SelectToken(EToken id, path_arg p, uint64_t validTokens);
+         void SetError(EPathError error);
+         void SkipWS();
+
       public:
+         bool     ThrowOnError = true;
+
          TokenScanner(path_arg p);
 
-         explicit operator bool() const { return !m_rpath.empty() && m_token != EToken::Invalid && !m_curException; }
+         explicit operator bool() const { return !m_rpath.empty() && m_curToken.id != EToken::Invalid && !m_curException; }
 
-         bool     ThrowOnError = true;
          auto const & CurrentException() const { return m_curException; }  ///< current error
-         auto Right() const { return m_rpath;  }                           ///< remainder (unscanned part)
-         size_t ScanOffset() const { return m_all.length() - m_rpath.length();  }
-         EToken NextToken(uint64_t validTokens = -1);
+         auto Right() const { return m_rpath; }                           ///< remainder (unscanned part)
+         size_t ScanOffset() const { return m_all.length() - m_rpath.length(); }
 
-         path_arg Value() const { return m_value;  }
-         EToken Token() const { return m_token;  }
-
-         void SetError(EPathError error);
+         Token const & NextToken(uint64_t validTokens = -1);
+         Token const & Token() const { return m_curToken; }
 
          void Resolve(Node * node);
 

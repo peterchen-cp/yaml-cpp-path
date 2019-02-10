@@ -29,8 +29,13 @@ SOFTWARE.
 namespace YAML
 {
    class Node;
-
    using path_arg = std::string_view;
+   enum class EPathError;
+
+   EPathError PathValidate(path_arg p, size_t * scanOffs = 0);
+   Node PathAt(Node node, path_arg path);
+   void PathResolve(Node & node, path_arg & path);
+   void PathResolve(Node & node, path_arg & path);
 
    enum class EPathError
    {
@@ -43,10 +48,6 @@ namespace YAML
       NodeNotFound,
    };
 
-   EPathError PathValidate(path_arg p, size_t * scanOffs = 0);
-   Node PathAt(Node node, path_arg path);
-   void PathResolve(Node & node, path_arg & path);
-   void PathResolve(Node & node, path_arg & path);
 
    class PathException : public std::exception
    {
