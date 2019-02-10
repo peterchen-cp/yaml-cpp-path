@@ -76,11 +76,12 @@ namespace YAML
       }
 
       /// result = target; target = newValue
-      template <typename T>
-      T Exchange(T & target, T newValue)
+      template <typename T1, typename T2>
+      T1 Exchange(T1 & target, T2 newValue)
       {
-         std::swap(target, newValue);
-         return newValue;
+         T1 result = std::move(target);
+         target = std::move(newValue);
+         return std::move(result);
       }
 
 
