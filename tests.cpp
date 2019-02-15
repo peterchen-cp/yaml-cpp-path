@@ -203,26 +203,29 @@ R"(1 : Hello
 TEST_CASE("ScanSelectorPreview")
 {
    using namespace YamlPathDetail;
-   TokenScanner scan("1.test.'xyz'.[0].abc[2][3]");
+   {
+      TokenScanner scan("1.test.'xyz'.[0].abc[2][3]");
 
-   CHECK(scan.NextSelector() == ESelector::Key);
-   CHECK(std::get<ArgKey>(scan.SelectorData()).key == "1");
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData< ArgKey>().key == "1");
 
-   CHECK(scan.NextSelector() == ESelector::Key);
-   CHECK(std::get<ArgKey>(scan.SelectorData()).key == "test");
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData<ArgKey>().key == "test");
 
-   CHECK(scan.NextSelector() == ESelector::Key);
-   CHECK(std::get<ArgKey>(scan.SelectorData()).key == "xyz");
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData<ArgKey>().key == "xyz");
 
-   CHECK(scan.NextSelector() == ESelector::Index);
-   CHECK(std::get<ArgIndex>(scan.SelectorData()).index == 0);
+      CHECK(scan.NextSelector() == ESelector::Index);
+      CHECK(scan.SelectorData<ArgIndex>().index == 0);
 
-   CHECK(scan.NextSelector() == ESelector::Key);
-   CHECK(std::get<ArgKey>(scan.SelectorData()).key == "abc");
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData<ArgKey>().key == "abc");
 
-   CHECK(scan.NextSelector() == ESelector::Index);
-   CHECK(std::get<ArgIndex>(scan.SelectorData()).index == 2);
+      CHECK(scan.NextSelector() == ESelector::Index);
+      CHECK(scan.SelectorData<ArgIndex>().index == 2);
 
-   CHECK(scan.NextSelector() == ESelector::Index);
-   CHECK(std::get<ArgIndex>(scan.SelectorData()).index == 3);
+      CHECK(scan.NextSelector() == ESelector::Index);
+      CHECK(scan.SelectorData<ArgIndex>().index == 3);
+   }
+
 }

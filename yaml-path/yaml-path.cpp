@@ -297,14 +297,14 @@ namespace YAML
                if (!node.IsMap())
                   return;
 
-               std::string key{ std::get<ArgKey>(scan.SelectorData()).key };
+               std::string key{ scan.SelectorData<ArgKey>().key };
                node.reset(node[key]);
                continue;
             }
 
             case ESelector::Index:
             {
-               size_t index = std::get<ArgIndex>(scan.SelectorData()).index;
+               size_t index = scan.SelectorData<ArgIndex>().index;
                if (node.IsScalar())
                {
                   if (index != 0)   // for scalar node, [0] sticks to the node

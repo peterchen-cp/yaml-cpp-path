@@ -130,7 +130,10 @@ namespace YAML
          // -----selector-level scanner
          ESelector NextSelector();
          ESelector Selector() const { return m_selector; }
-         auto const & SelectorData()  const { return m_selectorData; }
+         auto const & SelectorDataV()  const { return m_selectorData; }
+
+         template <typename T> 
+         T const & SelectorData() const { return std::get<T>(m_selectorData); }
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
          inline static const uint64_t ValidTokensAtBase = ValidTokensAtStart | BitsOf({ EToken::Period });
