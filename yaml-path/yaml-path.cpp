@@ -45,6 +45,9 @@ namespace YAML
       case EPathError::InvalidIndex:
          return m_what = (std::stringstream() << "Index expected at position " << m_offset << ": " << m_value).str();
 
+      case EPathError::UnexpectedEnd:
+         return m_what = (std::stringstream() << "unexpected end of path at position " << m_offset << ": " << m_value).str();
+
       default:
          return m_what = (std::stringstream() << "Undefined exception #" << (int)m_error << " at offset " << m_offset << ": " << m_value).str();
       }
@@ -58,6 +61,8 @@ namespace YAML
          case EPathError::Internal: throw PathInternalException(m_offset, m_value);
          case EPathError::InvalidToken: throw PathInvalidTokenException(m_offset, m_value);
          case EPathError::InvalidIndex: throw PathInvalidIndexException(m_offset, m_value);
+         case EPathError::UnexpectedEnd: throw PathUnexpectedEndException(m_offset, m_value);
+
          default: throw *this;
       }
    }
@@ -214,28 +219,42 @@ namespace YAML
 
       ESelector TokenScanner::NextSelector()
       {
-         if (m_rpath.empty())
-            return ESelector::None;
-
+         // sticky on error
          if (m_curException)
             return ESelector::Invalid;
 
-         if (!NextSelectorToken(m_rpath.size() == m_all.size() ? ValidTokensAtStart : ValidTokensAtBase))
+
+         // skip period if allowed at this point
+         if (m_periodAllowed)
+         {
+            if (!NextSelectorToken(ValidTokensAtStart | BitsOf({ EToken::Period })))
+               return ESelector::Invalid;
+            m_periodAllowed = false;
+            
+            if (m_curToken.id == EToken::Period)
+               m_selectorRequired = true;    // path cannot end with period after selector
+            else
+               m_tokenPending = true;        // if not a token, stuff this token back
+         }
+
+         // Next token
+         if (!NextSelectorToken(ValidTokensAtStart))
             return ESelector::Invalid;
 
+         // analyze token
          switch (m_curToken.id)
          {
+            case EToken::None:
+               if (m_selectorRequired)
+                  return SetError(EPathError::UnexpectedEnd), ESelector::Invalid;
+               return ESelector::None;
+
             case EToken::QuotedIdentifier:
             case EToken::UnquotedIdentifier:
             {
                SetSelector(ESelector::Key, ArgKey{ m_curToken.value });
-
-               if (!NextSelectorToken(BitsOf({ EToken::None, EToken::Period, EToken::OpenBracket })))
-                  return ESelector::Invalid;
-
-               if (m_curToken.id == EToken::OpenBracket)
-                  m_tokenPending = true;  // push back
-
+               m_leftOffset = ScanOffset();
+               m_periodAllowed = true;
                return m_selector;
             }
 
@@ -251,17 +270,10 @@ namespace YAML
                if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
                   return ESelector::Invalid;
 
-               if (!NextSelectorToken(BitsOf({ EToken::None, EToken::Period, EToken::OpenBracket })))
-                  return ESelector::Invalid;
-
-               if (m_curToken.id == EToken::OpenBracket)
-                  m_tokenPending = true;  // push back
-
+               m_periodAllowed = true;
+               m_leftOffset = ScanOffset();
                return SetSelector(ESelector::Index, ArgIndex{ *index });
             }
-
-
-
          }
          return ESelector::Invalid;
       }
@@ -273,11 +285,15 @@ namespace YAML
 
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
    */
-   EPathError PathValidate(path_arg p, size_t * scanOffs)
+   EPathError PathValidate(path_arg p, path_arg * valid, size_t * scanOffs)
    {
       YamlPathDetail::TokenScanner scan(p);
       while (scan)
          scan.NextSelector();
+
+      if (valid)
+         *valid= scan.Left();
+
       if (scanOffs)
          *scanOffs = scan.ScanOffset();
       return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
@@ -289,7 +305,8 @@ namespace YAML
       TokenScanner scan(path);
       while (scan && node)
       {
-         path = scan.Right();
+         path = scan.Right(); // path is updated only when both the selector is valid, and it selects a valid node. 
+            
          switch (scan.NextSelector())
          {
             case ESelector::Key:
@@ -298,7 +315,10 @@ namespace YAML
                   return;
 
                std::string key{ scan.SelectorData<ArgKey>().key };
-               node.reset(node[key]);
+               auto newNode = node[key];
+               if (!newNode)
+                  return EPathError::NodeNotFound;
+               node.reset(newNode);
                continue;
             }
 
@@ -332,3 +352,14 @@ namespace YAML
       return path.length() ? YamlPathDetail::UndefinedNode() : node;
    }
 } // namespace YAML
+
+
+/**
+
+\todo PathValidate, PathResolve etc. swallow some diagnostics. 
+      "CurrentException" needs to be replaced / refactored. 
+      PathResolve etc. should (optionally) provide diagnostics (both for parse errors, and node errors)
+
+\todo provide "IsPathError", "IsNodeError" (e.g. NodeErrors start at 100)
+
+*/

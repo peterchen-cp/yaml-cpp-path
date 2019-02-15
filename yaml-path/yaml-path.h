@@ -32,17 +32,25 @@ namespace YAML
    using path_arg = std::string_view;
    enum class EPathError;
 
-   EPathError PathValidate(path_arg p, size_t * scanOffs = 0);
+   EPathError PathValidate(path_arg p, path_arg * valid = 0, size_t * scanOffs = 0);
    Node PathAt(Node node, path_arg path);
-   void PathResolve(Node & node, path_arg & path);
    void PathResolve(Node & node, path_arg & path);
 
    enum class EPathError
    {
       None,
       Internal,
+
+      // parsing errors
       InvalidToken,
       InvalidIndex,
+      UnexpectedEnd,
+
+      /* to add a new error code, also add:
+          - a new exception typedef below (using Path...Exception = YamlPathDetail::PathExceptionT<EPathError::code>;)
+          - a formatter to PathException::What
+          - a throw expression to PathException::ThrowDerived
+      */
    };
 
 
@@ -81,4 +89,6 @@ namespace YAML
    using PathInternalException = YamlPathDetail::PathExceptionT<EPathError::Internal>;
    using PathInvalidTokenException = YamlPathDetail::PathExceptionT<EPathError::InvalidToken>;
    using PathInvalidIndexException = YamlPathDetail::PathExceptionT<EPathError::InvalidIndex>;
+   using PathUnexpectedEndException = YamlPathDetail::PathExceptionT<EPathError::UnexpectedEnd>;
+
 }

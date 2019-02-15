@@ -93,7 +93,10 @@ namespace YAML
 
          ESelector      m_selector = ESelector::None;
          tSelectorData  m_selectorData;
-         bool           m_tokenPending = false;
+         bool           m_tokenPending = false;          ///< m_curToken should be processed before reading a new one
+         size_t         m_leftOffset = 0;                ///< length of \ref Left
+         bool           m_periodAllowed = false;         ///< next token may be a period 
+         bool           m_selectorRequired = false;      ///< another selector is required for a well-formed path (e.g. after "abc.")
 
          std::optional<PathException> m_curException;
 
@@ -120,7 +123,8 @@ namespace YAML
          explicit operator bool() const { return !m_rpath.empty() && m_curToken.id != EToken::Invalid && !m_curException; }
 
          auto const & CurrentException() const { return m_curException; }  ///< current error
-         auto Right() const { return m_rpath; }                           ///< remainder (unscanned part)
+         auto Left() const { return m_all.substr(0, m_leftOffset); }       ///< already scanned part that forms a valid path 
+         auto Right() const { return m_rpath; }                            ///< remainder (unscanned part)
          size_t ScanOffset() const { return m_all.length() - m_rpath.length(); }
 
          // -----token-level scanner

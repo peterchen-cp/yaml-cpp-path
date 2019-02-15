@@ -150,8 +150,8 @@ TEST_CASE("PathResolve - Sequence")
    }
 
    {
-      //auto n = CheckPathResolve(root, "[4]", "[4]");  // TODO: start offset should stick to base
-      //CHECK(!n);
+      auto n = CheckPathResolve(root, "[5]", "[5]");  // TODO: out-of-range offset should not move forward
+      CHECK(n.size() == 3);
    }
 }
 
@@ -200,7 +200,33 @@ R"(1 : Hello
    }
 }
 
-TEST_CASE("ScanSelectorPreview")
+namespace
+{
+   void CheckSelectorError(std::string_view s, EPathError expectedError, std::string_view expectedLeft, std::string_view expectedRight, 
+      std::optional<std::string> expectedErrorValue = std::nullopt)
+   {
+      using namespace YamlPathDetail;
+      TokenScanner scan(s);
+
+      while (1)
+      {
+         auto st = scan.NextSelector();
+         CHECK(st != ESelector::None);
+         if (st == ESelector::Invalid)
+            break;
+      }
+      CHECK(scan.CurrentException());
+      CHECK(scan.CurrentException()->Error() == expectedError);
+      CHECK(scan.Left() == expectedLeft);
+      CHECK(scan.Right() == expectedRight);
+
+      if (expectedErrorValue)
+         CHECK(scan.CurrentException()->Value() == *expectedErrorValue);
+   }
+}
+
+
+TEST_CASE("ScanSelector")
 {
    using namespace YamlPathDetail;
    {
@@ -228,4 +254,16 @@ TEST_CASE("ScanSelectorPreview")
       CHECK(scan.SelectorData<ArgIndex>().index == 3);
    }
 
+   {
+      // these tests go a little bit into implementation details, 
+      // particularly "expectedRight" and "expectedErrorValue" are for diagnostic purposes only, and not exactly guaranteed by the API.
+      // However, we check here that they make SOME sense, i.e. not be totally off
+      CheckSelectorError(".a", EPathError::InvalidToken, "",      "a", ".");
+      CheckSelectorError("a.", EPathError::UnexpectedEnd, "a",    "", "");
+      CheckSelectorError("a..b", EPathError::InvalidToken,        "a", "b", ".");
+      CheckSelectorError("a[.]", EPathError::InvalidIndex, "a",   "]", ".");
+
+      // only as long as we only support integer indices:
+      CheckSelectorError("a[abc]", EPathError::InvalidIndex, "a", "]", "abc");
+   }
 }
