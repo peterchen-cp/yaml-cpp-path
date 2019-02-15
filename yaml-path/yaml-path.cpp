@@ -307,10 +307,51 @@ namespace YAML
       return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
    }
 
-   EPathError PathResolve(YAML::Node & node, path_arg & path)
+   namespace
+   {
+      bool IsMatch(Node node)
+      {
+         return !(!node ||
+            node.IsNull() ||
+            (node.IsSequence() && node.size() == 0) ||
+            (node.IsMap() && node.size() == 0));
+      }
+
+      EPathError SeqMapByKey(Node & node, path_arg key)
+      {
+         /**
+         \todo Optimization: YAML::Node could uses a reserve
+         \todo Optimization: convert<string_view> without copy to string
+         */
+         YAML::Node newNode;
+         if (node.IsSequence())
+         {
+            for (auto && el : node)
+               if (el.IsMap())
+               {
+                  Node value = el[std::string(key)];
+                  if (value)
+                     newNode.push_back(value);
+               }
+         }
+         else if (node.IsMap())
+            newNode = node[std::string(key)];
+         else
+            return EPathError::InvalidNodeType;
+
+         if (!IsMatch(newNode))
+            return EPathError::NodeNotFound;
+
+         node.reset(newNode);
+         return EPathError::None;
+      }
+   }
+
+   EPathError PathResolve(Node & node, path_arg & path)
    {
       using namespace YamlPathDetail;
       TokenScanner scan(path);
+
       while (scan)
       {
          if (!node)
@@ -321,17 +362,9 @@ namespace YAML
          switch (scan.NextSelector())
          {
             case ESelector::Key:
-            {
-               if (!node.IsMap())
-                  return EPathError::InvalidNodeType;
-
-               std::string key{ scan.SelectorData<ArgKey>().key };
-               auto newNode = node[key];
-               if (!newNode)
-                  return EPathError::NodeNotFound;
-               node.reset(newNode);
-               continue;
-            }
+            if (auto err = SeqMapByKey(node, scan.SelectorData<ArgKey>().key); err != EPathError::None)
+               return err;
+            continue;
 
             case ESelector::Index:
             {
@@ -375,4 +408,8 @@ namespace YAML
       "CurrentException" needs to be replaced / refactored. 
       PathResolve etc. should (optionally) provide diagnostics (both for parse errors, and node errors)
 
+\todo names:
+   - PathError is now a path-or-node error
+   - token scanner now scans both tokens and selectors
+   - Should "PathAt" be called" Select"?
 */

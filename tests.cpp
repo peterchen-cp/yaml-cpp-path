@@ -200,6 +200,56 @@ R"(1 : Hello
    }
 }
 
+
+TEST_CASE("PathResolve - SeqMap")
+{
+   char const * sroot =
+      R"(
+-  name : Joe
+   color: red
+   names: 3
+-  name : Sina
+   color: blue
+   names: 4
+-  name : Estragon
+   voice : none)";
+
+   using S = std::string;
+
+   {
+      auto node = YAML::Load(sroot);
+      path_arg path = "name";
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 3);
+      CHECK(node[0].as<S>("") == "Joe");
+      CHECK(node[1].as<S>("") == "Sina");
+      CHECK(node[2].as<S>("") == "Estragon");
+   }
+
+   {
+      auto node = YAML::Load(sroot);
+      path_arg path = "voice";
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 1);
+      CHECK(node[0].as<S>("") == "none");
+   }
+
+   {
+      auto node = YAML::Load(sroot);
+      path_arg path = "xyz";
+      CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
+      CHECK(path == "xyz");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 3);
+      CHECK(node[0].IsMap());
+   }
+
+}
+
 namespace
 {
    void CheckSelectorError(std::string_view s, EPathError expectedError, std::string_view expectedLeft, std::string_view expectedRight, 
