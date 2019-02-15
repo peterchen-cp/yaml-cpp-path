@@ -48,6 +48,12 @@ namespace YAML
       case EPathError::UnexpectedEnd:
          return m_what = (std::stringstream() << "unexpected end of path at position " << m_offset << ": " << m_value).str();
 
+      case EPathError::InvalidNodeType:
+         return m_what = (std::stringstream() << "node type mismatch at path position " << m_offset << ": " << m_value).str();
+
+      case EPathError::NodeNotFound:
+         return m_what = (std::stringstream() << "node not found at path position " << m_offset << ": " << m_value).str();
+
       default:
          return m_what = (std::stringstream() << "Undefined exception #" << (int)m_error << " at offset " << m_offset << ": " << m_value).str();
       }
@@ -63,6 +69,8 @@ namespace YAML
          case EPathError::InvalidIndex: throw PathInvalidIndexException(m_offset, m_value);
          case EPathError::UnexpectedEnd: throw PathUnexpectedEndException(m_offset, m_value);
 
+         case EPathError::InvalidNodeType: throw PathInvalidNodeTypeException(m_offset, m_value);
+         case EPathError::NodeNotFound: throw PathNodeNotFoundException(m_offset, m_value);
          default: throw *this;
       }
    }
@@ -299,12 +307,15 @@ namespace YAML
       return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
    }
 
-   void PathResolve(YAML::Node & node, path_arg & path)
+   EPathError PathResolve(YAML::Node & node, path_arg & path)
    {
       using namespace YamlPathDetail;
       TokenScanner scan(path);
-      while (scan && node)
+      while (scan)
       {
+         if (!node)
+            return EPathError::NodeNotFound;
+
          path = scan.Right(); // path is updated only when both the selector is valid, and it selects a valid node. 
             
          switch (scan.NextSelector())
@@ -312,7 +323,7 @@ namespace YAML
             case ESelector::Key:
             {
                if (!node.IsMap())
-                  return;
+                  return EPathError::InvalidNodeType;
 
                std::string key{ scan.SelectorData<ArgKey>().key };
                auto newNode = node[key];
@@ -328,15 +339,18 @@ namespace YAML
                if (node.IsScalar())
                {
                   if (index != 0)   // for scalar node, [0] sticks to the node
-                     node.reset(UndefinedNode());
+                     return EPathError::NodeNotFound;
                   continue;
                }
                if (node.IsSequence())
                {
+                  if (index >= node.size())
+                     return EPathError::NodeNotFound;
+
                   node.reset(node[index]);
                   continue;
                }
-               return;     // cannot go in
+               return EPathError::InvalidNodeType;     // cannot go in
             }
 
             default:
@@ -344,6 +358,7 @@ namespace YAML
          }
       }
       path = scan.Right();
+      return EPathError::None;
    }
 
    Node PathAt(YAML::Node node, path_arg path)
@@ -359,7 +374,5 @@ namespace YAML
 \todo PathValidate, PathResolve etc. swallow some diagnostics. 
       "CurrentException" needs to be replaced / refactored. 
       PathResolve etc. should (optionally) provide diagnostics (both for parse errors, and node errors)
-
-\todo provide "IsPathError", "IsNodeError" (e.g. NodeErrors start at 100)
 
 */
