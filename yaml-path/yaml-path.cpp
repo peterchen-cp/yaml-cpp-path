@@ -112,27 +112,6 @@ namespace YAML
          return result;
       }
 
-      /// converts path_arg to a n unsigned integer; if it is not a valid index, nullopt is returned
-      std::optional<size_t> AsIndex(path_arg p)
-      {
-         size_t value = 0;
-         size_t prev = value;
-         size_t index = 0;
-         while (index < p.size())
-         {
-            char c = p[index];
-            ++index;
-            if (c < '0' || c >'9')
-               return std::nullopt;
-
-            value = value * 10 + (c - '0');
-            if (value < prev)  // overflow
-               return std::nullopt;
-            prev = value;
-         }
-         return value;
-      }
-
       // ----- TokenScanner
       EToken GetSingleCharToken(char c, std::initializer_list<std::pair<char, EToken>> values)
       {
@@ -210,6 +189,27 @@ namespace YAML
          return error;
       }
 
+      std::optional<size_t> TokenScanner::AsIndex()
+      {
+         if (m_curToken.id != EToken::UnquotedIdentifier)
+            return std::nullopt;
+
+         size_t value = 0;
+         size_t index = 0;
+         for(auto c : m_curToken.value)
+         {
+            ++index;
+            if (c < '0' || c >'9')
+               return std::nullopt;
+
+            size_t prev = value;
+            value = value * 10 + (c - '0');
+            if (value < prev)  // unsigned integer overflow
+               return SetError(EPathError::InvalidIndex), std::nullopt;
+         }
+         return value;
+      }
+
       bool TokenScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
       {
          if (!m_tokenPending)
@@ -222,8 +222,6 @@ namespace YAML
          SetError(error);
          return false;
       }
-
-
 
       ESelector TokenScanner::NextSelector()
       {
@@ -271,16 +269,22 @@ namespace YAML
                if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier }), EPathError::InvalidIndex))
                   return ESelector::Invalid;
 
-               auto index = AsIndex(m_curToken.value);
-               if (!index)
-                  return SetError(EPathError::InvalidIndex), ESelector::Invalid;
-
-               if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+               auto index = AsIndex();
+               if (m_curException)
                   return ESelector::Invalid;
+               if (index)
+               {
+                  if (*index == (size_t) -1)
+                     return SetError(EPathError::InvalidIndex), ESelector::Invalid;
 
-               m_periodAllowed = true;
-               m_leftOffset = ScanOffset();
-               return SetSelector(ESelector::Index, ArgIndex{ *index });
+                  if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+                     return ESelector::Invalid;
+
+                  m_periodAllowed = true;
+                  m_leftOffset = ScanOffset();
+                  return SetSelector(ESelector::Index, ArgIndex{ *index });
+               }
+               return SetError(EPathError::InvalidIndex), ESelector::Invalid;
             }
          }
          return ESelector::Invalid;

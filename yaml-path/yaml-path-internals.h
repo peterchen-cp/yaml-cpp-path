@@ -114,7 +114,7 @@ namespace YAML
 
          void SkipWS();
          EPathError SetError(EPathError error);
-
+         std::optional<size_t> AsIndex();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
