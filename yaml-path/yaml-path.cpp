@@ -122,7 +122,7 @@ namespace YAML
       }
 
 
-      Token const & TokenScanner::SetToken(EToken id, path_arg p)
+      TokenData const & PathScanner::SetToken(EToken id, path_arg p)
       {
          // Generate error when ValidTokens are specified:
          m_curToken = { id, std::move(p) };
@@ -133,17 +133,17 @@ namespace YAML
          return m_curToken;
       }
 
-      void TokenScanner::SkipWS()
+      void PathScanner::SkipWS()
       {
          Split(m_rpath, isspace);
       }
 
-      inline TokenScanner::TokenScanner(path_arg p) : m_rpath(p), m_all(p)
+      inline PathScanner::PathScanner(path_arg p) : m_rpath(p), m_all(p)
       {
          SkipWS();
       }
 
-      Token const & TokenScanner::NextToken()
+      TokenData const & PathScanner::NextToken()
       {
          if (m_rpath.empty())
             return SetToken(EToken::None, path_arg());
@@ -181,7 +181,7 @@ namespace YAML
          return SetToken(EToken::UnquotedIdentifier, result);
       }
 
-      EPathError TokenScanner::SetError(EPathError error)
+      EPathError PathScanner::SetError(EPathError error)
       {
          assert(error != EPathError::None);
          m_curException = PathException(error, ScanOffset(), std::string(m_curToken.value));
@@ -190,7 +190,7 @@ namespace YAML
          return error;
       }
 
-      std::optional<size_t> TokenScanner::AsIndex()
+      std::optional<size_t> PathScanner::AsIndex()
       {
          if (m_curToken.id != EToken::UnquotedIdentifier)
             return std::nullopt;
@@ -211,7 +211,7 @@ namespace YAML
          return value;
       }
 
-      bool TokenScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
+      bool PathScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
       {
          if (!m_tokenPending)
             NextToken();
@@ -224,7 +224,7 @@ namespace YAML
          return false;
       }
 
-      ESelector TokenScanner::NextSelector()
+      ESelector PathScanner::NextSelector()
       {
          // sticky on error
          if (m_curException)
@@ -314,7 +314,7 @@ namespace YAML
    */
    EPathError PathValidate(path_arg p, path_arg * valid, size_t * scanOffs)
    {
-      YamlPathDetail::TokenScanner scan(p);
+      YamlPathDetail::PathScanner scan(p);
       while (scan)
          scan.NextSelector();
 
@@ -413,7 +413,7 @@ namespace YAML
    EPathError PathResolve(Node & node, path_arg & path)
    {
       using namespace YamlPathDetail;
-      TokenScanner scan(path);
+      PathScanner scan(path);
 
       while (scan)
       {
@@ -464,7 +464,7 @@ namespace YAML
       return EPathError::None;
    }
 
-   Node PathAt(YAML::Node node, path_arg path)
+   Node Select(YAML::Node node, path_arg path)
    {
       PathResolve(node, path);
       return path.length() ? YamlPathDetail::UndefinedNode() : node;

@@ -71,7 +71,7 @@ TEST_CASE("Internal: TokenScanner")
    using namespace YamlPathDetail;
    {
       path_arg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
-      TokenScanner scan(scanMe);
+      PathScanner scan(scanMe);
       CHECK(scan);
       CHECK(scan.NextToken().id == EToken::UnquotedIdentifier); 
       CHECK(scan.Token().value == "a");
@@ -339,7 +339,7 @@ namespace
       std::optional<std::string> expectedErrorValue = std::nullopt)
    {
       using namespace YamlPathDetail;
-      TokenScanner scan(s);
+      PathScanner scan(s);
 
       while (1)
       {
@@ -363,7 +363,7 @@ TEST_CASE("ScanSelector")
 {
    using namespace YamlPathDetail;
    {
-      TokenScanner scan("1.test.'xyz'.[0].abc[2][3]");
+      PathScanner scan("1.test.'xyz'.[0].abc[2][3]");
 
       CHECK(scan.NextSelector() == ESelector::Key);
       CHECK(scan.SelectorData< ArgKey>().key == "1");

@@ -29,11 +29,12 @@ SOFTWARE.
 namespace YAML
 {
    class Node;
+
    using path_arg = std::string_view;
    enum class EPathError;
 
+   Node Select(Node node, path_arg path);
    EPathError PathValidate(path_arg p, path_arg * valid = 0, size_t * scanOffs = 0);
-   Node PathAt(Node node, path_arg path);
    EPathError PathResolve(Node & node, path_arg & path);
 
    enum class EPathError

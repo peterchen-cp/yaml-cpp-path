@@ -63,7 +63,7 @@ namespace YAML
 
       EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
 
-      struct Token
+      struct TokenData
       {
          EToken   id = EToken::None;
          path_arg value;
@@ -86,13 +86,11 @@ namespace YAML
       using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;
 
 
-      class TokenScanner
+      class PathScanner
       {
-      public:
-
       private:
          path_arg    m_rpath;    // path to be rendered
-         Token       m_curToken;
+         TokenData   m_curToken;
 
          ESelector      m_selector = ESelector::None;
          tSelectorData  m_selectorData;
@@ -105,7 +103,7 @@ namespace YAML
 
          path_arg    m_all;      // original path (just to to get the offset)
 
-         Token const & SetToken(EToken id, path_arg p);
+         TokenData const & SetToken(EToken id, path_arg p);
 
          template<typename TArg>
          ESelector SetSelector(ESelector selector, TArg arg)
@@ -121,7 +119,7 @@ namespace YAML
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
-         TokenScanner(path_arg p);
+         PathScanner(path_arg p);
 
          explicit operator bool() const { return !m_rpath.empty() && m_curToken.id != EToken::Invalid && !m_curException; }
 
@@ -131,8 +129,8 @@ namespace YAML
          size_t ScanOffset() const { return m_all.length() - m_rpath.length(); }
 
          // -----token-level scanner
-         Token const & NextToken();
-         Token const & Token() const { return m_curToken; }
+         TokenData const & NextToken();
+         TokenData const & Token() const { return m_curToken; }
 
          // -----selector-level scanner
          ESelector NextSelector();
