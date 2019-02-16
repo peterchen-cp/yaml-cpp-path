@@ -58,6 +58,7 @@ namespace YAML
          OpenBracket,
          CloseBracket,
          Period,
+         Equal,
       };
 
       EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
@@ -74,13 +75,15 @@ namespace YAML
          None = 0,
          Key,
          Index,
+         SeqMapFilter,
       };
 
       struct ArgNull {};
       struct ArgKey { path_arg key; };
       struct ArgIndex { size_t index; };
+      struct ArgSeqMapFilter { path_arg key; std::optional<path_arg> value; };
 
-      using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex>;
+      using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;
 
 
       class TokenScanner

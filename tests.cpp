@@ -250,6 +250,89 @@ TEST_CASE("PathResolve - SeqMap")
 
 }
 
+
+TEST_CASE("PathResolve - SeqMapFilter")
+{
+   char const * sroot =
+      R"(
+-  name : Joe
+   color: red
+   place: here
+-  name : Sina
+   color: blue
+-  name : Estragon
+   color: blue
+   place: there)";
+
+   using S = std::string;
+
+   
+   {  // has 3 nodes with any "name"
+      auto node = YAML::Load(sroot);
+      path_arg path = "[name=]"; // all having a name
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 3);
+
+      CHECK(node[0].IsMap());
+      CHECK(node[0].size() == 3);
+      CHECK(node[0]["name"].as<S>() == "Joe");
+      CHECK(node[0]["color"].as<S>() == "red");
+
+      CHECK(node[1].IsMap());
+      CHECK(node[1].size() == 2);
+      CHECK(node[1]["name"].as<S>() == "Sina");
+      CHECK(node[1]["color"].as<S>() == "blue");
+
+      CHECK(node[2].IsMap());
+      CHECK(node[2].size() == 3);
+      CHECK(node[2]["name"].as<S>() == "Estragon");
+      CHECK(node[2]["color"].as<S>() == "blue");
+   }
+
+   {  // has no node with empty "name"
+      auto node = YAML::Load(sroot);
+      path_arg path = "[name='']"; // all having a name
+      CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
+      CHECK(path == "[name='']");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 3);
+      CHECK(node[2]["name"].as<S>() == "Estragon"); // let's call that "sufficient check if this is still the root node"
+   }
+
+   {  // has two nodes with any "place"
+      auto node = YAML::Load(sroot);
+      path_arg path = "[place=]";
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 2);
+      CHECK(node[0]["name"].as<S>() == "Joe");
+      CHECK(node[1]["name"].as<S>() == "Estragon");
+   }
+
+   {  // has three nodes with any color
+      auto node = YAML::Load(sroot);
+      path_arg path = "[color=]";
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 3);
+   }
+
+   {  // has three nodes with color "blue"
+      auto node = YAML::Load(sroot);
+      path_arg path = "[color=blue]";
+      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(path == "");
+      CHECK(node.IsSequence());
+      CHECK(node.size() == 2);
+      CHECK(node[0]["name"].as<S>() == "Sina");
+      CHECK(node[1]["name"].as<S>() == "Estragon");
+   }
+}
+
 namespace
 {
    void CheckSelectorError(std::string_view s, EPathError expectedError, std::string_view expectedLeft, std::string_view expectedRight, 
@@ -312,8 +395,5 @@ TEST_CASE("ScanSelector")
       CheckSelectorError("a.", EPathError::UnexpectedEnd, "a",    "", "");
       CheckSelectorError("a..b", EPathError::InvalidToken,        "a", "b", ".");
       CheckSelectorError("a[.]", EPathError::InvalidIndex, "a",   "]", ".");
-
-      // only as long as we only support integer indices:
-      CheckSelectorError("a[abc]", EPathError::InvalidIndex, "a", "]", "abc");
    }
 }

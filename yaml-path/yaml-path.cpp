@@ -157,6 +157,7 @@ namespace YAML
             { '.', EToken::Period },
             { '[', EToken::OpenBracket },
             { ']', EToken::CloseBracket },
+            { '=', EToken::Equal },
             });
 
          if (t != EToken::None)
@@ -266,17 +267,13 @@ namespace YAML
 
             case EToken::OpenBracket:
             {
-               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier }), EPathError::InvalidIndex))
+               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier }), EPathError::InvalidIndex))
                   return ESelector::Invalid;
 
+               // [1] --> index
                auto index = AsIndex();
-               if (m_curException)
-                  return ESelector::Invalid;
                if (index)
                {
-                  if (*index == (size_t) -1)
-                     return SetError(EPathError::InvalidIndex), ESelector::Invalid;
-
                   if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
                      return ESelector::Invalid;
 
@@ -284,14 +281,32 @@ namespace YAML
                   m_leftOffset = ScanOffset();
                   return SetSelector(ESelector::Index, ArgIndex{ *index });
                }
-               return SetError(EPathError::InvalidIndex), ESelector::Invalid;
+               if (m_curException)
+                  return ESelector::Invalid;
+
+               // [key=] or [key=value] for filtering
+               auto tokKey = m_curToken.value;
+
+               if (!NextSelectorToken(BitsOf({ EToken::Equal })))
+                  return ESelector::Invalid;
+
+               std::optional<path_arg> tokValue = std::nullopt;
+               if (!NextSelectorToken(BitsOf({ EToken::QuotedIdentifier, EToken::UnquotedIdentifier, EToken::CloseBracket })))
+                  return ESelector::Invalid;
+               if (m_curToken.id != EToken::CloseBracket)
+               {
+                  tokValue = m_curToken.value;
+                  if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+                     return ESelector::Invalid;
+               }
+
+               m_periodAllowed = true;
+               m_leftOffset = ScanOffset();
+               return SetSelector(ESelector::SeqMapFilter, ArgSeqMapFilter{tokKey, tokValue});
             }
          }
          return ESelector::Invalid;
       }
-
-
-
    } // YamlPathDetail
 
 
@@ -349,6 +364,50 @@ namespace YAML
          node.reset(newNode);
          return EPathError::None;
       }
+
+      bool prelim_node_eq(Node const & n, path_arg p)
+      {
+         /// \todo default to case insensitive comparison
+         /// \todo parametrize to case sensitive, partial match
+         return n.IsScalar() && n.as<std::string>() == p;
+      }
+
+      bool SeqMapFilterMatchElement(Node const & element, YamlPathDetail::ArgSeqMapFilter const & arg)
+      {
+         if (!element.IsMap())
+            return false;
+
+         auto v = element[std::string(arg.key)];
+         if (!v || !v.IsScalar())
+            return false;
+
+         return !arg.value ||    // any value accepted as long as key exists
+                prelim_node_eq(v, *arg.value);
+      }
+
+      EPathError SeqMapFilter(Node & node, YamlPathDetail::ArgSeqMapFilter const & arg)
+      {
+         Node newNode;
+         if (node.IsSequence())
+         {
+            for (auto && el : node)
+               if (SeqMapFilterMatchElement(el, arg))
+                  newNode.push_back(el);
+         }
+         else if (node.IsMap())
+         {
+            if (SeqMapFilterMatchElement(node, arg))
+               newNode = node;
+         }
+         else
+            return EPathError::InvalidNodeType;
+
+         if (!IsMatch(newNode))
+            return EPathError::NodeNotFound;
+
+         node.reset(newNode);
+         return EPathError::None;
+      }
    }
 
    EPathError PathResolve(Node & node, path_arg & path)
@@ -388,6 +447,13 @@ namespace YAML
                   continue;
                }
                return EPathError::InvalidNodeType;     // cannot go in
+            }
+
+            case ESelector::SeqMapFilter:
+            {
+               if (auto err = SeqMapFilter(node, scan.SelectorData<ArgSeqMapFilter>()); err != EPathError::None)
+                  return err;
+               continue;
             }
 
             default:
