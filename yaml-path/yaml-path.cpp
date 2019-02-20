@@ -204,7 +204,8 @@ namespace YAML
 
       void PathScanner::SkipWS()
       {
-         Split(m_rpath, isspace);
+         // non-ascii chars are NOT considered whitespace
+         Split(m_rpath, [](char c) { return isascii(c) && isspace(c); });
       }
 
       inline PathScanner::PathScanner(path_arg p) : m_rpath(p), m_all(p)
@@ -243,7 +244,8 @@ namespace YAML
          }
 
          // unquoted token
-         auto result = Split(m_rpath, [](char c) { return !isspace(c) && !ispunct(c); });
+         // unquoted token. non-ascii characters ARE treated as part of the token.
+         auto result = Split(m_rpath, [](char c) { return !isascii(c) || !(isspace(c) || ispunct(c)); });
          if (result.empty())
             return SetError(EPathError::InvalidToken), m_curToken;
 
