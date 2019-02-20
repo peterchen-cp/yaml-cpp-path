@@ -534,7 +534,7 @@ namespace YAML
             case ESelector::Index:
             {
                size_t index = scan.SelectorData<ArgIndex>().index;
-               if (node.IsScalar())
+               if (node.IsScalar() || node.IsMap())
                {
                   if (index != 0)   // for scalar node, [0] sticks to the node
                      return scan.SetError(EPathError::NodeNotFound);
