@@ -95,13 +95,12 @@ namespace YAML
          ESelector      m_selector = ESelector::None;
          tSelectorData  m_selectorData;
          bool           m_tokenPending = false;          ///< m_curToken should be processed before reading a new one
-         size_t         m_leftOffset = 0;                ///< length of \ref Left
          bool           m_periodAllowed = false;         ///< next token may be a period 
          bool           m_selectorRequired = false;      ///< another selector is required for a well-formed path (e.g. after "abc.")
 
-         std::optional<PathException> m_curException;
-
-         path_arg    m_all;      // original path (just to to get the offset)
+         EPathError     m_error = EPathError::None;
+         path_arg       m_fullPath;
+         PathException * m_diags = nullptr;
 
          TokenData const & SetToken(EToken id, path_arg p);
 
@@ -114,19 +113,17 @@ namespace YAML
          }
 
          void SkipWS();
-         EPathError SetError(EPathError error);
          std::optional<size_t> AsIndex();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
-         PathScanner(path_arg p);
+         PathScanner(path_arg p, PathException * diags = nullptr);
 
-         explicit operator bool() const { return !m_rpath.empty() && m_curToken.id != EToken::Invalid && !m_curException; }
+         explicit operator bool() const { return !m_rpath.empty() && m_error == EPathError::None; }
 
-         auto const & CurrentException() const { return m_curException; }  ///< current error
-         auto Left() const { return m_all.substr(0, m_leftOffset); }       ///< already scanned part that forms a valid path 
-         auto Right() const { return m_rpath; }                            ///< remainder (unscanned part)
-         size_t ScanOffset() const { return m_all.length() - m_rpath.length(); }
+         auto Error() const            { return m_error; }
+         auto const & Right() const    { return m_rpath; }                             ///< remainder (unscanned part)
+         size_t ScanOffset() const     { return m_fullPath.length() - m_rpath.length(); }        ///< token scanner position
 
          // -----token-level scanner
          TokenData const & NextToken();
@@ -139,6 +136,9 @@ namespace YAML
 
          template <typename T> 
          T const & SelectorData() const { return std::get<T>(m_selectorData); }
+
+         // for access by utility functions to record an error
+         EPathError SetError(EPathError error, uint64_t validTypes = 0);
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
          inline static const uint64_t ValidTokensAtBase = ValidTokensAtStart | BitsOf({ EToken::Period });

@@ -335,11 +335,11 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
 namespace
 {
-   void CheckSelectorError(std::string_view s, EPathError expectedError, std::string_view expectedLeft, std::string_view expectedRight, 
-      std::optional<std::string> expectedErrorValue = std::nullopt)
+   void CheckSelectorError(std::string_view s, EPathError expectedError, std::string_view expectedResolved, std::string_view expectedRight)
    {
       using namespace YamlPathDetail;
-      PathScanner scan(s);
+      PathException x;
+      PathScanner scan(s, &x);
 
       while (1)
       {
@@ -348,13 +348,11 @@ namespace
          if (st == ESelector::Invalid)
             break;
       }
-      CHECK(scan.CurrentException());
-      CHECK(scan.CurrentException()->Error() == expectedError);
-      CHECK(scan.Left() == expectedLeft);
+      CHECK(scan.Error() == expectedError);
+      CHECK(x.ResolvedPath() == expectedResolved);
       CHECK(scan.Right() == expectedRight);
 
-      if (expectedErrorValue)
-         CHECK(scan.CurrentException()->Value() == *expectedErrorValue);
+      // TODO: check expected diagnostics?
    }
 }
 
@@ -391,9 +389,9 @@ TEST_CASE("ScanSelector")
       // these tests go a little bit into implementation details, 
       // particularly "expectedRight" and "expectedErrorValue" are for diagnostic purposes only, and not exactly guaranteed by the API.
       // However, we check here that they make SOME sense, i.e. not be totally off
-      CheckSelectorError(".a", EPathError::InvalidToken, "",      "a", ".");
-      CheckSelectorError("a.", EPathError::UnexpectedEnd, "a",    "", "");
-      CheckSelectorError("a..b", EPathError::InvalidToken,        "a", "b", ".");
-      CheckSelectorError("a[.]", EPathError::InvalidIndex, "a",   "]", ".");
+      CheckSelectorError(".a", EPathError::InvalidToken, "",      "a");
+      CheckSelectorError("a.", EPathError::UnexpectedEnd, "a",    "");
+      CheckSelectorError("a..b", EPathError::InvalidToken,        "a", "b");
+      CheckSelectorError("a[.]", EPathError::InvalidIndex, "a",   "]");
    }
 }

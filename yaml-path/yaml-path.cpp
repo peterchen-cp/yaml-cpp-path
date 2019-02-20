@@ -29,52 +29,6 @@ SOFTWARE.
 
 namespace YAML
 {
-
-   // ----- PathException
-   std::string const & PathException::What() const
-   {
-      if (!m_what.length())
-         return m_what;
-      switch (m_error)
-      {
-      case EPathError::None:   return m_what = "OK";
-
-      case EPathError::InvalidToken:
-         return m_what = (std::stringstream() << "Invalid Token at position " << m_offset << ": " << m_value).str();
-
-      case EPathError::InvalidIndex:
-         return m_what = (std::stringstream() << "Index expected at position " << m_offset << ": " << m_value).str();
-
-      case EPathError::UnexpectedEnd:
-         return m_what = (std::stringstream() << "unexpected end of path at position " << m_offset << ": " << m_value).str();
-
-      case EPathError::InvalidNodeType:
-         return m_what = (std::stringstream() << "node type mismatch at path position " << m_offset << ": " << m_value).str();
-
-      case EPathError::NodeNotFound:
-         return m_what = (std::stringstream() << "node not found at path position " << m_offset << ": " << m_value).str();
-
-      default:
-         return m_what = (std::stringstream() << "Undefined exception #" << (int)m_error << " at offset " << m_offset << ": " << m_value).str();
-      }
-   }
-
-   void PathException::ThrowDerived()
-   {
-      switch (m_error)
-      {
-         case EPathError::None: assert(false);  return;
-         case EPathError::Internal: throw PathInternalException(m_offset, m_value);
-         case EPathError::InvalidToken: throw PathInvalidTokenException(m_offset, m_value);
-         case EPathError::InvalidIndex: throw PathInvalidIndexException(m_offset, m_value);
-         case EPathError::UnexpectedEnd: throw PathUnexpectedEndException(m_offset, m_value);
-
-         case EPathError::InvalidNodeType: throw PathInvalidNodeTypeException(m_offset, m_value);
-         case EPathError::NodeNotFound: throw PathNodeNotFoundException(m_offset, m_value);
-         default: throw *this;
-      }
-   }
-
    namespace YamlPathDetail
    {
       template <typename T2, typename TEnum>
@@ -196,6 +150,9 @@ namespace YAML
          // Generate error when ValidTokens are specified:
          m_curToken = { id, std::move(p) };
 
+         if (id != EToken::Invalid && m_diags)
+            m_diags->m_offsTokenScan = ScanOffset();
+
          /* skipping whitespace after token, so that if this was the last token,
             we get to the end of the string and operator bool becomes false */
          SkipWS();
@@ -208,8 +165,10 @@ namespace YAML
          Split(m_rpath, [](char c) { return isascii(c) && isspace(c); });
       }
 
-      inline PathScanner::PathScanner(path_arg p) : m_rpath(p), m_all(p)
+      inline PathScanner::PathScanner(path_arg p, PathException * diags) : m_rpath(p), m_diags(diags), m_fullPath(p)
       {
+         if (m_diags)
+            *m_diags = PathException();
          SkipWS();
       }
 
@@ -218,7 +177,7 @@ namespace YAML
          if (m_rpath.empty())
             return SetToken(EToken::None, path_arg());
 
-         if (m_curException)
+         if (m_error != EPathError::None)
             return m_curToken;
 
          // single-char special tokens
@@ -243,7 +202,6 @@ namespace YAML
             return SetToken(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1));
          }
 
-         // unquoted token
          // unquoted token. non-ascii characters ARE treated as part of the token.
          auto result = Split(m_rpath, [](char c) { return !isascii(c) || !(isspace(c) || ispunct(c)); });
          if (result.empty())
@@ -252,10 +210,22 @@ namespace YAML
          return SetToken(EToken::UnquotedIdentifier, result);
       }
 
-      EPathError PathScanner::SetError(EPathError error)
+      EPathError PathScanner::SetError(EPathError error, uint64_t validTypes)
       {
          assert(error != EPathError::None);
-         m_curException = PathException(error, ScanOffset(), std::string(m_curToken.value));
+         m_error = error;
+         if (m_diags)
+         {
+            m_diags->m_fullPath = m_fullPath;
+            m_diags->m_error = error;
+            m_diags->m_validTypes = validTypes;
+
+            if (PathException::IsPathError(error))
+               m_diags->m_errorType = (decltype(m_diags->m_errorType))m_curToken.id;
+            else if (PathException::IsNodeError(error))
+               m_diags->m_errorType = (decltype(m_diags->m_errorType))m_selector;
+
+         }
          m_curToken = { EToken::Invalid };
          SetSelector(ESelector::Invalid, ArgNull{});
          return error;
@@ -291,16 +261,20 @@ namespace YAML
          if (BitsContain(validTokens, m_curToken.id))
             return true;
 
-         SetError(error);
+         if (m_curToken.id == EToken::None)     // change any error to "unexpected end" if EToken::None is found but not allowed
+            error = EPathError::UnexpectedEnd;
+         SetError(error, validTokens);
          return false;
       }
 
       ESelector PathScanner::NextSelector()
       {
          // sticky on error
-         if (m_curException)
+         if (m_error != EPathError::None)
             return ESelector::Invalid;
 
+         if (m_diags)
+            m_diags->m_offsSelectorScan = ScanOffset();
 
          // skip period if allowed at this point
          if (m_periodAllowed)
@@ -324,14 +298,13 @@ namespace YAML
          {
             case EToken::None:
                if (m_selectorRequired)
-                  return SetError(EPathError::UnexpectedEnd), ESelector::Invalid;
+                  return SetError(EPathError::UnexpectedEnd, ValidTokensAtStart), ESelector::Invalid;
                return ESelector::None;
 
             case EToken::QuotedIdentifier:
             case EToken::UnquotedIdentifier:
             {
                SetSelector(ESelector::Key, ArgKey{ m_curToken.value });
-               m_leftOffset = ScanOffset();
                m_periodAllowed = true;
                return m_selector;
             }
@@ -349,10 +322,9 @@ namespace YAML
                      return ESelector::Invalid;
 
                   m_periodAllowed = true;
-                  m_leftOffset = ScanOffset();
                   return SetSelector(ESelector::Index, ArgIndex{ *index });
                }
-               if (m_curException)
+               if (m_error != EPathError::None)
                   return ESelector::Invalid;
 
                // [key=] or [key=value] for filtering
@@ -372,7 +344,6 @@ namespace YAML
                }
 
                m_periodAllowed = true;
-               m_leftOffset = ScanOffset();
                return SetSelector(ESelector::SeqMapFilter, ArgSeqMapFilter{tokKey, tokValue});
             }
          }
@@ -381,23 +352,84 @@ namespace YAML
    } // YamlPathDetail
 
 
+   using namespace YamlPathDetail;
+
+   std::string PathException::ErrorItem() const
+   {
+      if (!m_errorItem.length() && m_errorType)
+      {
+         if (IsNodeError())
+            m_errorItem = MapValue((ESelector)m_errorType, MapESelectorName, "");
+         else if (IsPathError())
+            m_errorItem = MapValue((EToken)m_errorType, MapETokenName, "");
+      }
+      return m_errorItem;
+   }
+
+   // ----- PathException
+   std::string const & PathException::What(bool detailed) const
+   {
+      if (!m_short.length())
+         m_short = GetErrorMessage(m_error);
+
+      if (!detailed || m_error == EPathError::None)
+         return m_short;
+
+      if (m_detailed.length())
+         return m_detailed;
+
+      std::stringstream str;
+      str << m_short << "\n";
+
+      str << "  error at path offset: " << m_offsTokenScan << "\n";
+
+      if (IsPathError())
+      {
+         if (m_validTypes)
+            str << "  allowed tokens: " << MapBitMask(m_validTypes, MapETokenName) << "\n";
+         if (m_errorType)
+            str << "  token found: " << ErrorItem() << "\n";
+      }
+      else if (IsNodeError())
+      {
+         if (m_validTypes)
+            str << "  supported node type: " << MapBitMask(m_validTypes, MapNodeTypeName) << "\n";
+         if (m_errorType)
+            str << "  for selector: " << ErrorItem() << "\n";
+      }
+
+      if (m_fullPath.length())
+         str << "  path to parse: " << m_fullPath << "\n";
+
+      str << "  resolved path: " << ResolvedPath() << "\n";
+
+      return m_detailed = str.str();
+   }
+
+   std::string PathException::GetErrorMessage(EPathError error)
+   {
+      return MapValue(error, MapEPathErrorName, "");
+   }
+
+
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
    */
-   EPathError PathValidate(path_arg p, path_arg * valid, size_t * scanOffs)
+   EPathError PathValidate(path_arg p, std::string * valid, size_t * errorOffs)
    {
-      YamlPathDetail::PathScanner scan(p);
+      PathException x;
+      PathScanner scan(p, &x);
       while (scan)
          scan.NextSelector();
 
       if (valid)
-         *valid= scan.Left();
+         *valid = x.ResolvedPath();
 
-      if (scanOffs)
-         *scanOffs = scan.ScanOffset();
-      return scan.CurrentException() ? scan.CurrentException()->Error() : EPathError::None;
+      if (errorOffs)
+         *errorOffs = x.ErrorOffset();
+      return scan.Error(); 
    }
 
-   namespace
+   namespace YamlPathDetail
    {
       bool IsMatch(Node node)
       {
@@ -407,7 +439,7 @@ namespace YAML
             (node.IsMap() && node.size() == 0));
       }
 
-      EPathError SeqMapByKey(Node & node, path_arg key)
+      EPathError SeqMapByKey(Node & node, path_arg key, PathScanner & scan)
       {
          /**
          \todo Optimization: YAML::Node could uses a reserve
@@ -427,10 +459,10 @@ namespace YAML
          else if (node.IsMap())
             newNode = node[std::string(key)];
          else
-            return EPathError::InvalidNodeType;
+            return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Sequence | NodeType::Map }));
 
          if (!IsMatch(newNode))
-            return EPathError::NodeNotFound;
+            return scan.SetError(EPathError::NodeNotFound);
 
          node.reset(newNode);
          return EPathError::None;
@@ -443,7 +475,7 @@ namespace YAML
          return n.IsScalar() && n.as<std::string>() == p;
       }
 
-      bool SeqMapFilterMatchElement(Node const & element, YamlPathDetail::ArgSeqMapFilter const & arg)
+      bool SeqMapFilterMatchElement(Node const & element, ArgSeqMapFilter const & arg)
       {
          if (!element.IsMap())
             return false;
@@ -456,7 +488,7 @@ namespace YAML
                 prelim_node_eq(v, *arg.value);
       }
 
-      EPathError SeqMapFilter(Node & node, YamlPathDetail::ArgSeqMapFilter const & arg)
+      EPathError SeqMapFilter(Node & node, ArgSeqMapFilter const & arg, PathScanner & scan)
       {
          Node newNode;
          if (node.IsSequence())
@@ -471,32 +503,31 @@ namespace YAML
                newNode = node;
          }
          else
-            return EPathError::InvalidNodeType;
+            return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Sequence | NodeType::Map }));
 
          if (!IsMatch(newNode))
-            return EPathError::NodeNotFound;
+            return scan.SetError(EPathError::NodeNotFound);
 
          node.reset(newNode);
          return EPathError::None;
       }
-   }
+   } // namespace YamlPathDetail
 
-   EPathError PathResolve(Node & node, path_arg & path)
+   EPathError PathResolve(Node & node, path_arg & path, PathException * px) 
    {
-      using namespace YamlPathDetail;
-      PathScanner scan(path);
+      PathScanner scan(path, px);
 
       while (scan)
       {
-         if (!node)
-            return EPathError::NodeNotFound;
+         if (!node)      // should not trigger except on initial node being undefined (and then only if there is a path given)
+            return scan.SetError(EPathError::NodeNotFound);
 
          path = scan.Right(); // path is updated only when both the selector is valid, and it selects a valid node. 
             
          switch (scan.NextSelector())
          {
             case ESelector::Key:
-            if (auto err = SeqMapByKey(node, scan.SelectorData<ArgKey>().key); err != EPathError::None)
+            if (auto err = SeqMapByKey(node, scan.SelectorData<ArgKey>().key, scan); err != EPathError::None)
                return err;
             continue;
 
@@ -506,29 +537,33 @@ namespace YAML
                if (node.IsScalar())
                {
                   if (index != 0)   // for scalar node, [0] sticks to the node
-                     return EPathError::NodeNotFound;
+                     return scan.SetError(EPathError::NodeNotFound);
                   continue;
                }
                if (node.IsSequence())
                {
                   if (index >= node.size())
-                     return EPathError::NodeNotFound;
+                     return scan.SetError(EPathError::NodeNotFound);
 
                   node.reset(node[index]);
                   continue;
                }
-               return EPathError::InvalidNodeType;     // cannot go in
+               return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Scalar, NodeType::Sequence }));
             }
 
             case ESelector::SeqMapFilter:
             {
-               if (auto err = SeqMapFilter(node, scan.SelectorData<ArgSeqMapFilter>()); err != EPathError::None)
+               if (auto err = SeqMapFilter(node, scan.SelectorData<ArgSeqMapFilter>(), scan); err != EPathError::None)
                   return err;
                continue;
             }
 
+            case ESelector::Invalid:
+               return scan.Error();
+
             default:
                assert(false);    // no other selectors supported right now
+               return scan.Error();
          }
       }
       path = scan.Right();
@@ -537,9 +572,30 @@ namespace YAML
 
    Node Select(YAML::Node node, path_arg path)
    {
-      PathResolve(node, path);
-      return path.length() ? YamlPathDetail::UndefinedNode() : node;
+      PathException x;
+      auto err = PathResolve(node, path, &x);
+      if (err == EPathError::None)
+         return node;
+
+      if (x.IsNodeError())
+         return UndefinedNode();
+
+      throw x;
    }
+
+   Node Require(YAML::Node node, path_arg path)
+   {
+      PathException x;
+      auto err = PathResolve(node, path, &x);
+      if (err == EPathError::None)
+         return node;
+
+      throw x;
+   }
+
+
+
+
 } // namespace YAML
 
 

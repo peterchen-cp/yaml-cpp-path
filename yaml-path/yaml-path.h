@@ -29,17 +29,19 @@ SOFTWARE.
 namespace YAML
 {
    class Node;
+   class PathException;
 
    using path_arg = std::string_view;
    enum class EPathError;
 
    Node Select(Node node, path_arg path);
-   EPathError PathValidate(path_arg p, path_arg * valid = 0, size_t * scanOffs = 0);
-   EPathError PathResolve(Node & node, path_arg & path);
+   Node Require(Node node, path_arg path);
+   EPathError PathValidate(path_arg p, std::string * valid = 0, size_t * errorOffs = 0);
+   EPathError PathResolve(Node & node, path_arg & path, PathException * px = 0);
 
    enum class EPathError
    {
-      None,
+      None = 0,
       Internal,
 
       // parsing errors
@@ -51,34 +53,47 @@ namespace YAML
       FirstNodeError_ = 100,     ///< all error codes after this indicate the selector was valid, but a matching node could not be found
       InvalidNodeType,
       NodeNotFound
-      /* to add a new error code, also add:
-          - a new exception typedef below (using Path...Exception = YamlPathDetail::PathExceptionT<EPathError::code>;)
-          - a formatter to PathException::What
-          - a throw expression to PathException::ThrowDerived
-      */
+      /* to add a new error code, also add: a formatter to PathException::What */
    };
 
+   namespace YamlPathDetail { class PathScanner; }
 
    class PathException : public std::exception
    {
    public:
+      PathException() = default;
 
-      PathException(EPathError error, size_t offs = 0, std::string value = std::string()) : m_error(error), m_offset(offs), m_value(value) {}
+      EPathError Error() const { return m_error; }       ///< error code for this exception
+      bool IsNodeError() const { return IsNodeError(m_error); }
+      bool IsPathError() const { return IsPathError(m_error); }
 
-      EPathError Error() const { return m_error; }
-      size_t Offset() const { return m_offset; }
-      auto Value() const { return m_value; }
+      std::string FullPath() const { return m_fullPath; }
+      std::string ResolvedPath() const { return m_fullPath.substr(0, m_offsSelectorScan);  }
+      std::size_t ErrorOffset() const { return m_offsTokenScan; }
+      std::string ErrorItem() const;
 
       char const * what() const override { return What().c_str(); }
-      std::string const & What() const;
+      std::string const & What(bool detailed = true) const;
 
-      void ThrowDerived();
+      static std::string GetErrorMessage(EPathError error);
+      static bool IsNodeError(EPathError error) { return error >= EPathError::FirstNodeError_; }
+      static bool IsPathError(EPathError error) { return error < EPathError::FirstNodeError_ && error != EPathError::None; }
 
    private:
+      friend class YamlPathDetail::PathScanner; // if scanner has a non-null diags member, it will feed it scan state information
+
       EPathError m_error = EPathError::None;
-      std::string m_value;
-      size_t m_offset = 0;
-      mutable std::string m_what;
+      std::string m_fullPath;
+      std::size_t m_offsTokenScan = 0;
+      std::size_t m_offsSelectorScan = 0;
+
+      uint64_t    m_validTypes = 0;    // BitsOf(YAML::NodeType) for node errors, BitsOf(EToken) for token errors
+      unsigned    m_errorType = 0;     // ESelector, or EToken
+
+      // will be generated on demand
+      mutable std::string m_short;
+      mutable std::string m_detailed;
+      mutable std::string m_errorItem;
    };
 
    namespace YamlPathDetail
