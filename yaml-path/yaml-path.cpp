@@ -77,6 +77,75 @@ namespace YAML
 
    namespace YamlPathDetail
    {
+      template <typename T2, typename TEnum>
+      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2())
+      {
+         for (auto && p : values)
+            if (p.first == value)
+               return p.second;
+         return dflt;
+      }
+
+      template <typename T2, typename TBit, typename TMask>
+      std::string MapBitMask(TMask value, std::initializer_list<std::pair<TBit, T2>> values, T2 sep = ", ")
+      {
+         std::stringstream result;
+         bool noSep = true;
+         auto Sep = [&]() -> std::stringstream & { if (!Exchange(noSep, false)) result << sep; return result; };
+         for (auto && p : values)
+         {
+            TMask mask = ((TMask)1) << static_cast<TMask>(p.first);
+            if (value & mask)
+            {
+               Sep() << p.second;
+               value &= ~mask;
+            }
+         }
+         if (value != 0)
+            Sep() << "(" << std::hex << value << "h)";
+         return result.str();
+      }
+
+      std::initializer_list<std::pair<EToken, char const *>> MapETokenName =
+      {
+         { EToken::OpenBracket, "open bracket"},
+         { EToken::CloseBracket, "closing bracket" },
+         { EToken::Equal, "equal" },
+         { EToken::None, "end of path" },
+         { EToken::Period, "period" },
+         { EToken::QuotedIdentifier, "quoted identifier" },
+         { EToken::UnquotedIdentifier, "unquoted identifier" },
+      };
+
+      std::initializer_list<std::pair<NodeType::value, char const *>> MapNodeTypeName =
+      {
+         { NodeType::Map, "map" },
+         { NodeType::Sequence, "sequence" },
+         { NodeType::Scalar , "scalar" },
+         { NodeType::Null, "(null)" },
+         { NodeType::Undefined, "(undefined)" },
+      };
+
+      std::initializer_list<std::pair<ESelector, char const *>> MapESelectorName =
+      {
+         { ESelector::Index,  "index" },
+         { ESelector::Key,    "key" },
+         { ESelector::SeqMapFilter, "seq-map filter" },
+         { ESelector::None, "(none)" },
+         { ESelector::Invalid, "(invalid)" },
+      };
+
+      std::initializer_list<std::pair<EPathError, char const *>> MapEPathErrorName =
+      {
+         { EPathError::None ,             "(none)" },
+         { EPathError::Internal,          "(internal, please report)" },
+         { EPathError::InvalidIndex,      "invalid index" },
+         { EPathError::InvalidNodeType,   "selector cannot not match node type" },
+         { EPathError::InvalidToken,      "invalid token" },
+         { EPathError::NodeNotFound,      "no node matches selector" },
+         { EPathError::UnexpectedEnd,     "unexpected end of path" },
+      };
+
       // ----- Utility functions
 
       /// Creates an undefined YAML node (<code>(bool)UndefinedNode() == false</code>)
