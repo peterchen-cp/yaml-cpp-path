@@ -123,15 +123,15 @@ namespace YAML
       /** splits path at offset, 
           returning everything left of [offset], assigning everything right of it to \c path. 
       */
-      path_arg SplitAt(path_arg & path, size_t offset)
+      PathArg SplitAt(PathArg & path, size_t offset)
       {
          if (offset == 0)
-            return path_arg();
+            return PathArg();
 
          if (offset >= path.size())
-            return Exchange(path, path_arg());
+            return Exchange(path, PathArg());
 
-         path_arg result = path.substr(0, offset);
+         PathArg result = path.substr(0, offset);
          path = path.substr(offset);
          return result;
       }
@@ -146,7 +146,7 @@ namespace YAML
       }
 
 
-      TokenData const & PathScanner::SetToken(EToken id, path_arg p)
+      TokenData const & PathScanner::SetToken(EToken id, PathArg p)
       {
          // Generate error when ValidTokens are specified:
          m_curToken = { id, std::move(p) };
@@ -177,7 +177,7 @@ namespace YAML
          Split(m_rpath, [](char c) { return isascii(c) && isspace(c); });
       }
 
-      inline PathScanner::PathScanner(path_arg p, path_bind_args args, PathException * diags) : m_rpath(p), m_args(args), m_diags(diags), m_fullPath(p)
+      inline PathScanner::PathScanner(PathArg p, PathBoundArgs args, PathException * diags) : m_rpath(p), m_args(args), m_diags(diags), m_fullPath(p)
       {
          if (m_diags)
             *m_diags = PathException();
@@ -187,7 +187,7 @@ namespace YAML
       TokenData const & PathScanner::NextToken()
       {
          if (m_rpath.empty())
-            return SetToken(EToken::None, path_arg());
+            return SetToken(EToken::None, PathArg());
 
          if (m_error != EPathError::None)
             return m_curToken;
@@ -213,7 +213,7 @@ namespace YAML
          {
             size_t end = m_rpath.find(m_rpath[0], 1);
             if (end == std::string::npos)
-               return SetToken(EToken::Invalid, path_arg());
+               return SetToken(EToken::Invalid, PathArg());
 
             return SetToken(EToken::QuotedIdentifier, SplitAt(m_rpath, end + 1).substr(1, end - 1));
          }
@@ -372,7 +372,7 @@ namespace YAML
                if (!NextSelectorToken(BitsOf({ EToken::Equal })))
                   return ESelector::Invalid;
 
-               std::optional<path_arg> tokValue = std::nullopt;
+               std::optional<PathArg> tokValue = std::nullopt;
                if (!NextSelectorToken(BitsOf({ EToken::QuotedIdentifier, EToken::UnquotedIdentifier, EToken::CloseBracket })))
                   return ESelector::Invalid;
                if (m_curToken.id != EToken::CloseBracket)
@@ -456,7 +456,7 @@ namespace YAML
 
    /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
    */
-   EPathError PathValidate(path_arg p, std::string * valid, size_t * errorOffs)
+   EPathError PathValidate(PathArg p, std::string * valid, size_t * errorOffs)
    {
       PathException x;
       PathScanner scan(p, {}, &x);
@@ -481,7 +481,7 @@ namespace YAML
             (node.IsMap() && node.size() == 0));
       }
 
-      EPathError SeqMapByKey(Node & node, path_arg key, PathScanner & scan)
+      EPathError SeqMapByKey(Node & node, PathArg key, PathScanner & scan)
       {
          /**
          \todo Optimization: YAML::Node could uses a reserve
@@ -510,7 +510,7 @@ namespace YAML
          return EPathError::None;
       }
 
-      bool prelim_node_eq(Node const & n, path_arg p)
+      bool prelim_node_eq(Node const & n, PathArg p)
       {
          /// \todo default to case insensitive comparison
          /// \todo parametrize to case sensitive, partial match
@@ -555,7 +555,7 @@ namespace YAML
       }
    } // namespace YamlPathDetail
 
-   EPathError PathResolve(Node & node, path_arg & path, path_bind_args args, PathException * px)
+   EPathError PathResolve(Node & node, PathArg & path, PathBoundArgs args, PathException * px)
    {
       PathScanner scan(path, args, px);
 
@@ -612,7 +612,7 @@ namespace YAML
       return EPathError::None;
    }
 
-   Node Select(YAML::Node node, path_arg path, path_bind_args args)
+   Node Select(YAML::Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);
@@ -625,7 +625,7 @@ namespace YAML
       throw x;
    }
 
-   Node Require(YAML::Node node, path_arg path, path_bind_args args)
+   Node Require(YAML::Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);

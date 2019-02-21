@@ -38,10 +38,10 @@ namespace YAML
 {
    namespace YamlPathDetail
    {
-      path_arg SplitAt(path_arg & path, size_t offset);
+      PathArg SplitAt(PathArg & path, size_t offset);
 
       template <typename TPred>
-      path_arg Split(path_arg & path, TPred pred);
+      PathArg Split(PathArg & path, TPred pred);
 
       template <typename TBits = uint64_t, typename T>
       constexpr uint64_t BitsOf(std::initializer_list<T> values);
@@ -75,7 +75,7 @@ namespace YAML
       struct TokenData
       {
          EToken   id = EToken::None;
-         path_arg value;
+         PathArg value;
          size_t index = 0;
       };
 
@@ -89,9 +89,9 @@ namespace YAML
       };
 
       struct ArgNull {};
-      struct ArgKey { path_arg key; };
+      struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
-      struct ArgSeqMapFilter { path_arg key; std::optional<path_arg> value; };
+      struct ArgSeqMapFilter { PathArg key; std::optional<PathArg> value; };
 
       using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;
 
@@ -99,8 +99,8 @@ namespace YAML
       class PathScanner
       {
       private:
-         path_arg    m_rpath;       // remainder of path to be scanned
-         path_bind_args m_args;     // list of arguments that should be used as tokens
+         PathArg    m_rpath;       // remainder of path to be scanned
+         PathBoundArgs m_args;     // list of arguments that should be used as tokens
          size_t         m_argIdx;   // next argument index to fetch
          TokenData   m_curToken;
 
@@ -111,10 +111,10 @@ namespace YAML
          bool           m_selectorRequired = false;      ///< another selector is required for a well-formed path (e.g. after "abc.")
 
          EPathError     m_error = EPathError::None;
-         path_arg       m_fullPath;
+         PathArg       m_fullPath;
          PathException * m_diags = nullptr;
 
-         TokenData const & SetToken(EToken id, path_arg p);
+         TokenData const & SetToken(EToken id, PathArg p);
          TokenData const & SetToken(EToken id, size_t index);
 
          template<typename TArg>
@@ -129,7 +129,7 @@ namespace YAML
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
-         PathScanner(path_arg p, path_bind_args args = {}, PathException * diags = nullptr);
+         PathScanner(PathArg p, PathBoundArgs args = {}, PathException * diags = nullptr);
 
          explicit operator bool() const { return !m_rpath.empty() && m_error == EPathError::None; }
 
@@ -164,7 +164,7 @@ namespace YAML
    namespace YamlPathDetail
    {
       template <typename TPred>
-      path_arg Split(path_arg & path, TPred pred)
+      PathArg Split(PathArg & path, TPred pred)
       {
          size_t offset = 0;
          while (offset < path.size() && pred(path[offset]))

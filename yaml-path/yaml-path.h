@@ -33,16 +33,16 @@ namespace YAML
    class Node;
    class PathException;
 
-   using path_arg = std::string_view;
+   using PathArg = std::string_view;
    enum class EPathError;
 
-   using path_bind_arg = std::variant<size_t, path_arg>;
-   using path_bind_args = std::initializer_list<path_bind_arg>;
+   using PathBoundArg = std::variant<size_t, PathArg>;
+   using PathBoundArgs = std::initializer_list<PathBoundArg>;
 
-   Node Select(Node node, path_arg path, path_bind_args args = {});
-   Node Require(Node node, path_arg path, path_bind_args args = {});
-   EPathError PathValidate(path_arg p, std::string * valid = 0, size_t * errorOffs = 0);
-   EPathError PathResolve(Node & node, path_arg & path, path_bind_args args = {}, PathException * px = 0);
+   Node Select(Node node, PathArg path, PathBoundArgs args = {});
+   Node Require(Node node, PathArg path, PathBoundArgs args = {});
+   EPathError PathValidate(PathArg p, std::string * valid = 0, size_t * errorOffs = 0);
+   EPathError PathResolve(Node & node, PathArg & path, PathBoundArgs args = {}, PathException * px = 0);
 
    enum class EPathError
    {

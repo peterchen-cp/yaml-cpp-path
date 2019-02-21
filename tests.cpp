@@ -23,7 +23,7 @@ TEST_CASE("Internal: SplitAt")
 {
    using namespace YAML::YamlPathDetail;
 
-   auto Check = [](path_arg p, size_t offset, path_arg expectedResult, path_arg expectedP)
+   auto Check = [](PathArg p, size_t offset, PathArg expectedResult, PathArg expectedP)
    {
       CHECK(p.size() == expectedResult.size() + expectedP.size());
       auto result = SplitAt(p, offset);
@@ -47,7 +47,7 @@ TEST_CASE("Internal: SplitAt")
 
 namespace
 {
-   void CheckSplit(path_arg p, path_arg expectedResult, path_arg expectedP)
+   void CheckSplit(PathArg p, PathArg expectedResult, PathArg expectedP)
    {
       using namespace YAML::YamlPathDetail;
 
@@ -70,7 +70,7 @@ TEST_CASE("Internal: TokenScanner")
 {
    using namespace YamlPathDetail;
    {
-      path_arg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
+      PathArg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
       PathScanner scan(scanMe);
       CHECK(scan);
       CHECK(scan.NextToken().id == EToken::UnquotedIdentifier); 
@@ -118,7 +118,7 @@ TEST_CASE("PathValidate")
    // TODO: CHECK(PathValidate("a.") == EPathError::InvalidToken);
 }
 
-YAML::Node CheckPathResolve(YAML::Node node, YAML::path_arg path, std::string expectedRemainder)
+YAML::Node CheckPathResolve(YAML::Node node, YAML::PathArg path, std::string expectedRemainder)
 {
    PathResolve(node, path);
    CHECK(path == expectedRemainder);
@@ -218,7 +218,7 @@ TEST_CASE("PathResolve - SeqMap")
 
    {
       auto node = YAML::Load(sroot);
-      path_arg path = "name";
+      PathArg path = "name";
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -230,7 +230,7 @@ TEST_CASE("PathResolve - SeqMap")
 
    {
       auto node = YAML::Load(sroot);
-      path_arg path = "voice";
+      PathArg path = "voice";
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -240,7 +240,7 @@ TEST_CASE("PathResolve - SeqMap")
 
    {
       auto node = YAML::Load(sroot);
-      path_arg path = "xyz";
+      PathArg path = "xyz";
       CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
       CHECK(path == "xyz");
       CHECK(node.IsSequence());
@@ -269,7 +269,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    
    {  // has 3 nodes with any "name"
       auto node = YAML::Load(sroot);
-      path_arg path = "[name=]"; // all having a name
+      PathArg path = "[name=]"; // all having a name
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -293,7 +293,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has no node with empty "name"
       auto node = YAML::Load(sroot);
-      path_arg path = "[name='']"; // all having a name
+      PathArg path = "[name='']"; // all having a name
       CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
       CHECK(path == "[name='']");
       CHECK(node.IsSequence());
@@ -303,7 +303,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has two nodes with any "place"
       auto node = YAML::Load(sroot);
-      path_arg path = "[place=]";
+      PathArg path = "[place=]";
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -314,7 +314,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has three nodes with any color
       auto node = YAML::Load(sroot);
-      path_arg path = "[color=]";
+      PathArg path = "[color=]";
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -323,7 +323,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has three nodes with color "blue"
       auto node = YAML::Load(sroot);
-      path_arg path = "[color=blue]";
+      PathArg path = "[color=blue]";
       CHECK(PathResolve(node, path) == EPathError::None);
       CHECK(path == "");
       CHECK(node.IsSequence());
