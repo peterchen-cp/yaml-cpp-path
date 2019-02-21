@@ -60,6 +60,7 @@ namespace YAML
          Period,
          Equal,
          Index,         // translated from UnquotedIdentifier in NextSelectorToken
+         FetchArg,
       };
       /* when adding a new token, also add to:
             - MapETokenName
@@ -99,6 +100,8 @@ namespace YAML
       {
       private:
          path_arg    m_rpath;       // remainder of path to be scanned
+         path_bind_args m_args;     // list of arguments that should be used as tokens
+         size_t         m_argIdx;   // next argument index to fetch
          TokenData   m_curToken;
 
          ESelector      m_selector = ESelector::None;
@@ -123,11 +126,10 @@ namespace YAML
          }
 
          void SkipWS();
-         bool TokenToIndex();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:
-         PathScanner(path_arg p, PathException * diags = nullptr);
+         PathScanner(path_arg p, path_bind_args args = {}, PathException * diags = nullptr);
 
          explicit operator bool() const { return !m_rpath.empty() && m_error == EPathError::None; }
 
@@ -150,7 +152,7 @@ namespace YAML
          // for access by utility functions to record an error
          EPathError SetError(EPathError error, uint64_t validTypes = 0);
 
-         inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
+         inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::FetchArg, EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
       };
    }
 }

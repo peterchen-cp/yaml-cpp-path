@@ -177,7 +177,7 @@ namespace YAML
          Split(m_rpath, [](char c) { return isascii(c) && isspace(c); });
       }
 
-      inline PathScanner::PathScanner(path_arg p, PathException * diags) : m_rpath(p), m_diags(diags), m_fullPath(p)
+      inline PathScanner::PathScanner(path_arg p, path_bind_args args, PathException * diags) : m_rpath(p), m_args(args), m_diags(diags), m_fullPath(p)
       {
          if (m_diags)
             *m_diags = PathException();
@@ -199,6 +199,7 @@ namespace YAML
             { '[', EToken::OpenBracket },
             { ']', EToken::CloseBracket },
             { '=', EToken::Equal },
+            { '%', EToken::FetchArg },
             });
 
          if (t != EToken::None)
@@ -270,6 +271,23 @@ namespace YAML
             m_tokenPending = false;    // re-use previous token once after pushing it back
          else
             NextToken();
+
+         // Fetch argument from argument list if required
+         if (m_curToken.id == EToken::FetchArg)
+         {
+            auto & v = m_args.begin()[m_argIdx];
+            if (m_diags)
+               m_diags->m_fromBoundArg = m_argIdx;
+            ++m_argIdx;
+
+            switch (v.index())
+            {
+               case 0:  SetToken(EToken::Index, std::get<size_t>(v)); break;
+               case 1:  SetToken(EToken::QuotedIdentifier, std::get<std::string_view>(v)); break;
+               default: SetError(EPathError::Internal); return false;      // TODO: InvalidArg error code?
+            }
+         }
+
          // translate unquoted token to index, if caller accepts an index
          if (m_curToken.id == EToken::UnquotedIdentifier && BitsContain(validTokens, EToken::Index))
          {
@@ -404,6 +422,9 @@ namespace YAML
 
       str << "  error at path offset: " << m_offsTokenScan << "\n";
 
+      if (m_fromBoundArg)
+         str << "  token taken from bound arg #" << *m_fromBoundArg << "\n";
+
       if (IsPathError())
       {
          if (m_validTypes)
@@ -438,7 +459,7 @@ namespace YAML
    EPathError PathValidate(path_arg p, std::string * valid, size_t * errorOffs)
    {
       PathException x;
-      PathScanner scan(p, &x);
+      PathScanner scan(p, {}, &x);
       while (scan)
          scan.NextSelector();
 
@@ -534,9 +555,9 @@ namespace YAML
       }
    } // namespace YamlPathDetail
 
-   EPathError PathResolve(Node & node, path_arg & path, PathException * px) 
+   EPathError PathResolve(Node & node, path_arg & path, path_bind_args args, PathException * px)
    {
-      PathScanner scan(path, px);
+      PathScanner scan(path, args, px);
 
       while (scan)
       {
@@ -591,10 +612,10 @@ namespace YAML
       return EPathError::None;
    }
 
-   Node Select(YAML::Node node, path_arg path)
+   Node Select(YAML::Node node, path_arg path, path_bind_args args)
    {
       PathException x;
-      auto err = PathResolve(node, path, &x);
+      auto err = PathResolve(node, path, args, &x);
       if (err == EPathError::None)
          return node;
 
@@ -604,10 +625,10 @@ namespace YAML
       throw x;
    }
 
-   Node Require(YAML::Node node, path_arg path)
+   Node Require(YAML::Node node, path_arg path, path_bind_args args)
    {
       PathException x;
-      auto err = PathResolve(node, path, &x);
+      auto err = PathResolve(node, path, args, &x);
       if (err == EPathError::None)
          return node;
 

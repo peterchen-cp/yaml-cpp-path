@@ -25,6 +25,8 @@ SOFTWARE.
 #pragma once
 
 #include <string_view>
+#include <variant>
+#include <optional>
 
 namespace YAML
 {
@@ -34,10 +36,13 @@ namespace YAML
    using path_arg = std::string_view;
    enum class EPathError;
 
-   Node Select(Node node, path_arg path);
-   Node Require(Node node, path_arg path);
+   using path_bind_arg = std::variant<size_t, path_arg>;
+   using path_bind_args = std::initializer_list<path_bind_arg>;
+
+   Node Select(Node node, path_arg path, path_bind_args args = {});
+   Node Require(Node node, path_arg path, path_bind_args args = {});
    EPathError PathValidate(path_arg p, std::string * valid = 0, size_t * errorOffs = 0);
-   EPathError PathResolve(Node & node, path_arg & path, PathException * px = 0);
+   EPathError PathResolve(Node & node, path_arg & path, path_bind_args args = {}, PathException * px = 0);
 
    enum class EPathError
    {
@@ -70,6 +75,7 @@ namespace YAML
       std::string FullPath() const { return m_fullPath; }
       std::string ResolvedPath() const { return m_fullPath.substr(0, m_offsSelectorScan);  }
       std::size_t ErrorOffset() const { return m_offsTokenScan; }
+      std::optional<size_t> BoundArg() const { return m_fromBoundArg;  }      // if token was taken from a bound arg, this is its index
       std::string ErrorItem() const;
 
       char const * what() const override { return What().c_str(); }
@@ -86,6 +92,7 @@ namespace YAML
       std::string m_fullPath;
       std::size_t m_offsTokenScan = 0;
       std::size_t m_offsSelectorScan = 0;
+      std::optional<size_t> m_fromBoundArg;
 
       uint64_t    m_validTypes = 0;    // BitsOf(YAML::NodeType) for node errors, BitsOf(EToken) for token errors
       unsigned    m_errorType = 0;     // ESelector, or EToken

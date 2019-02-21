@@ -339,7 +339,7 @@ namespace
    {
       using namespace YamlPathDetail;
       PathException x;
-      PathScanner scan(s, &x);
+      PathScanner scan(s, {}, &x);
 
       while (1)
       {
@@ -393,5 +393,25 @@ TEST_CASE("ScanSelector")
       CheckSelectorError("a.", EPathError::UnexpectedEnd, "a",    "");
       CheckSelectorError("a..b", EPathError::InvalidToken,        "a", "b");
       CheckSelectorError("a[.]", EPathError::InvalidIndex, "a",   "]");
+   }
+}
+
+TEST_CASE("ScanSelector - bound arguments")
+{
+   using namespace YamlPathDetail;
+   {
+      PathScanner scan("node.%.[%].edon", { "param", 42 });
+
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData< ArgKey>().key == "node");
+
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData< ArgKey>().key == "param");
+
+      CHECK(scan.NextSelector() == ESelector::Index);
+      CHECK(scan.SelectorData< ArgIndex>().index == 42);
+
+      CHECK(scan.NextSelector() == ESelector::Key);
+      CHECK(scan.SelectorData< ArgKey>().key == "edon");
    }
 }
