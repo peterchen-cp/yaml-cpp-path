@@ -89,7 +89,7 @@ namespace YAML
       class PathScanner
       {
       private:
-         path_arg    m_rpath;    // path to be rendered
+         path_arg    m_rpath;       // remainder of path to be scanned
          TokenData   m_curToken;
 
          ESelector      m_selector = ESelector::None;
@@ -141,7 +141,6 @@ namespace YAML
          EPathError SetError(EPathError error, uint64_t validTypes = 0);
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
-         inline static const uint64_t ValidTokensAtBase = ValidTokensAtStart | BitsOf({ EToken::Period });
       };
    }
 }

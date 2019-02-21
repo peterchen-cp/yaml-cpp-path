@@ -324,8 +324,6 @@ namespace YAML
                   m_periodAllowed = true;
                   return SetSelector(ESelector::Index, ArgIndex{ *index });
                }
-               if (m_error != EPathError::None)
-                  return ESelector::Invalid;
 
                // [key=] or [key=value] for filtering
                auto tokKey = m_curToken.value;
