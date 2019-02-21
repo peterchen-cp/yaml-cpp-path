@@ -59,7 +59,15 @@ namespace YAML
          CloseBracket,
          Period,
          Equal,
+         Index,         // translated from UnquotedIdentifier in NextSelectorToken
       };
+      /* when adding a new token, also add to:
+            - MapETokenName
+            - ValidTokensAtStart, if applicable
+            - TokenData, if a new data type is required
+            - PathScanner::NextToken, to recognize it
+            - PathScanner::NextSelector, to process it
+      */
 
       EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
 
@@ -67,6 +75,7 @@ namespace YAML
       {
          EToken   id = EToken::None;
          path_arg value;
+         size_t index = 0;
       };
 
       enum class ESelector
@@ -103,6 +112,7 @@ namespace YAML
          PathException * m_diags = nullptr;
 
          TokenData const & SetToken(EToken id, path_arg p);
+         TokenData const & SetToken(EToken id, size_t index);
 
          template<typename TArg>
          ESelector SetSelector(ESelector selector, TArg arg)
@@ -113,7 +123,7 @@ namespace YAML
          }
 
          void SkipWS();
-         std::optional<size_t> AsIndex();
+         bool TokenToIndex();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
 
       public:

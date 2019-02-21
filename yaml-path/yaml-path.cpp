@@ -69,6 +69,7 @@ namespace YAML
          { EToken::Period, "period" },
          { EToken::QuotedIdentifier, "quoted identifier" },
          { EToken::UnquotedIdentifier, "unquoted identifier" },
+         { EToken::Index, "Index" },
       };
 
       std::initializer_list<std::pair<NodeType::value, char const *>> MapNodeTypeName =
@@ -159,6 +160,17 @@ namespace YAML
          return m_curToken;
       }
 
+      YAML::YamlPathDetail::TokenData const & PathScanner::SetToken(EToken id, size_t index)
+      {
+         m_curToken = { id, {}, index };
+
+         if (id != EToken::Invalid && m_diags)
+            m_diags->m_offsTokenScan = ScanOffset();
+
+         SkipWS();
+         return m_curToken;
+      }
+
       void PathScanner::SkipWS()
       {
          // non-ascii chars are NOT considered whitespace
@@ -190,7 +202,10 @@ namespace YAML
             });
 
          if (t != EToken::None)
-            return SetToken(t, SplitAt(m_rpath, 1));
+         {
+            SplitAt(m_rpath, 1);
+            return SetToken(t, {});
+         }
 
          // quoted token
          if (head == '\'' || head == '"')
@@ -231,32 +246,40 @@ namespace YAML
          return error;
       }
 
-      std::optional<size_t> PathScanner::AsIndex()
+      enum class EAsIndex { OK, NotAnIndex, IndexOverflow };
+      EAsIndex AsIndex(std::string_view v, size_t & index)
       {
-         if (m_curToken.id != EToken::UnquotedIdentifier)
-            return std::nullopt;
-
          size_t value = 0;
-         size_t index = 0;
-         for(auto c : m_curToken.value)
+         for (auto c : v)
          {
-            ++index;
             if (c < '0' || c >'9')
-               return std::nullopt;
+               return EAsIndex::NotAnIndex;
 
             size_t prev = value;
             value = value * 10 + (c - '0');
             if (value < prev)  // unsigned integer overflow
-               return SetError(EPathError::InvalidIndex), std::nullopt;
+               return EAsIndex::IndexOverflow;
          }
-         return value;
+         index = value;
+         return EAsIndex::OK;
       }
 
       bool PathScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
       {
-         if (!m_tokenPending)
+         if (m_tokenPending)
+            m_tokenPending = false;    // re-use previous token once after pushing it back
+         else
             NextToken();
-         m_tokenPending = false;
+         // translate unquoted token to index, if caller accepts an index
+         if (m_curToken.id == EToken::UnquotedIdentifier && BitsContain(validTokens, EToken::Index))
+         {
+            switch (AsIndex(m_curToken.value, m_curToken.index))
+            {
+               case EAsIndex::OK:               m_curToken.id = EToken::Index; break;
+               case EAsIndex::IndexOverflow:    SetError(EPathError::InvalidIndex); return false;  // TODO: IndexOverflow error code?
+               case EAsIndex::NotAnIndex:       break;
+            }
+         }
 
          if (BitsContain(validTokens, m_curToken.id))
             return true;
@@ -311,18 +334,18 @@ namespace YAML
 
             case EToken::OpenBracket:
             {
-               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier }), EPathError::InvalidIndex))
+               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier, EToken::Index }), EPathError::InvalidIndex))
                   return ESelector::Invalid;
 
                // [1] --> index
-               auto index = AsIndex();
-               if (index)
+               if (m_curToken.id == EToken::Index)
                {
+                  const size_t index = m_curToken.index;
                   if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
                      return ESelector::Invalid;
 
                   m_periodAllowed = true;
-                  return SetSelector(ESelector::Index, ArgIndex{ *index });
+                  return SetSelector(ESelector::Index, ArgIndex{ index });
                }
 
                // [key=] or [key=value] for filtering
