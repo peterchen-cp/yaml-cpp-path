@@ -42,5 +42,6 @@ private:
 public:
    CRichEditCtrl m_edFile;
    CComboBox m_ddMethod;
+   CComboBox m_ddPath;
    afx_msg void OnCbnSelchangeDdMethod();
 };

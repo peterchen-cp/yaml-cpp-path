@@ -13,12 +13,15 @@ char const * initialText =
 R"(
 -  name : Joe
    color: red
-   names: 3
+   friends : ~
 -  name : Sina
    color: blue
-   names: 4
 -  name : Estragon
-   voice : none)";
+   color : red
+   friends :
+      Wladimir : good
+      Godot : unreliable
+)";
 
 CYAPATEDlg::CYAPATEDlg(CWnd* pParent /*=nullptr*/)
 	: CDialog(IDD_YAPATE_DIALOG, pParent)
@@ -30,13 +33,15 @@ void CYAPATEDlg::DoDataExchange(CDataExchange* pDX)
 {
    CDialog::DoDataExchange(pDX);
    DDX_Control(pDX, IDC_ED_FILE, m_edFile);
+   DDX_Control(pDX, IDC_DD_PATH, m_ddPath);
    DDX_Control(pDX, IDC_DD_METHOD, m_ddMethod);
 }
 
 BEGIN_MESSAGE_MAP(CYAPATEDlg, CDialog)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-   ON_EN_CHANGE(IDC_ED_PATH, &CYAPATEDlg::OnEnChangeEdPath)
+   ON_CBN_EDITCHANGE(IDC_DD_PATH, &CYAPATEDlg::OnEnChangeEdPath)
+   ON_CBN_SELCHANGE(IDC_DD_PATH, &CYAPATEDlg::OnEnChangeEdPath)
    ON_EN_CHANGE(IDC_ED_FILE, &CYAPATEDlg::OnEnChangeEdFile)
    ON_CBN_SELCHANGE(IDC_DD_METHOD, &CYAPATEDlg::OnCbnSelchangeDdMethod)
 END_MESSAGE_MAP()
@@ -59,13 +64,25 @@ BOOL CYAPATEDlg::OnInitDialog()
    m_edFile.SetEventMask(m_edFile.GetEventMask() | ENM_CHANGE);
    m_edFile.SetWindowText(CString(initialText));
 
-
-
-   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("Select")), emSelect);
-   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("Require")), emRequire);
-   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("PathResolve")), emPathResolve);
-   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("PathValidate")), emPathValidate);
+   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Select")), emSelect);
+   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Require")), emRequire);
+   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::PathResolve")), emPathResolve);
+   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::PathValidate")), emPathValidate);
    m_ddMethod.SetCurSel(0);
+
+
+   m_ddPath.AddString(_T("name"));
+   m_ddPath.AddString(_T("[1].name"));
+   m_ddPath.AddString(_T("name[2]"));
+   m_ddPath.AddString(_T("color"));
+   m_ddPath.AddString(_T("[color=red]"));
+   m_ddPath.AddString(_T("[color=blue]"));
+   m_ddPath.AddString(_T("[friends=]"));
+   m_ddPath.AddString(_T("friends.Wladimir"));
+   m_ddPath.AddString(_T("friends.Godot[0]"));
+   m_ddPath.AddString(_T("[1]"));
+   m_ddPath.AddString(_T("[1].name"));
+   m_ddPath.AddString(_T("[1].wealth"));
 
    UpdateOutput();
 	return TRUE;
@@ -188,7 +205,11 @@ void CYAPATEDlg::UpdateOutput()
    CString strResult;
 
    CString strPath;
-   GetDlgItemText(IDC_ED_PATH, strPath);
+   int sel = m_ddPath.GetCurSel();
+   if (sel >= 0)
+      m_ddPath.GetLBText(sel, strPath);
+   else
+      GetDlgItemText(IDC_ED_PATH, strPath);
    auto u8path = Utf8(strPath);
    YAML::PathArg path = u8path;
 
