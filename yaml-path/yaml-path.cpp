@@ -510,24 +510,17 @@ namespace YAML
          return EPathError::None;
       }
 
-      bool prelim_node_eq(Node const & n, PathArg p)
-      {
-         /// \todo default to case insensitive comparison
-         /// \todo parametrize to case sensitive, partial match
-         return n.IsScalar() && n.as<std::string>() == p;
-      }
-
       bool SeqMapFilterMatchElement(Node const & element, ArgSeqMapFilter const & arg)
       {
          if (!element.IsMap())
             return false;
 
          auto v = element[std::string(arg.key)];
-         if (!v || !v.IsScalar())
+         if (!v)
             return false;
 
-         return !arg.value ||    // any value accepted as long as key exists
-                prelim_node_eq(v, *arg.value);
+         return !arg.value ||    // if no required value is given, any value accepted as long as key exists
+                (v.IsScalar() && v.as<std::string>() == *arg.value);
       }
 
       EPathError SeqMapFilter(Node & node, ArgSeqMapFilter const & arg, PathScanner & scan)
