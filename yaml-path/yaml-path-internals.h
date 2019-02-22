@@ -38,17 +38,22 @@ namespace YAML
 {
    namespace YamlPathDetail
    {
+      /// \internal basic parser helper: removes \c offset chars from \c path, and returns the removed chars
       PathArg SplitAt(PathArg & path, size_t offset);
 
+      /// \internal basic parser helper: removes chars from \c path until \c pred is false, and returns the removed chars
       template <typename TPred>
       PathArg Split(PathArg & path, TPred pred);
 
+      /// \internal returns an integer in which the bit positions specified by \c values are set, \sa BitsContain
       template <typename TBits = uint64_t, typename T>
       constexpr uint64_t BitsOf(std::initializer_list<T> values);
 
+      /// \internal checks if the bit at position \v is set in \c bits
       template<typename TBits, typename TValue>
       bool constexpr BitsContain(TBits bits, TValue v);
 
+      /// \internal Tokens supported by the token level parser of \ref PathScanner
       enum class EToken
       {
          Invalid = -1,
@@ -70,8 +75,7 @@ namespace YAML
             - PathScanner::NextSelector, to process it
       */
 
-      EToken GetSingleCharToken(char c, std::initializer_list< std::pair<char, EToken> > values);
-
+      /// \internal data for one token, see \ref PathScanner
       struct TokenData
       {
          EToken   id = EToken::None;
@@ -79,6 +83,7 @@ namespace YAML
          size_t index = 0;
       };
 
+      /// \internal Selectors supported by the selector level parser of \ref PathScanner
       enum class ESelector
       {
          Invalid = -1,
@@ -88,21 +93,35 @@ namespace YAML
          SeqMapFilter,
       };
 
+      // Data for different selector types
       struct ArgNull {};
       struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
       struct ArgSeqMapFilter { PathArg key; std::optional<PathArg> value; };
 
-      using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;
+      /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select
+         This class implements two layers of the scan: 
+         The <i>token level scanner</i>, retrieves \ref EToken "tokens"  from the path,until nothing is left. 
+         \ref NextToken retrieves the next token, \ref Token gives access to the last retrieved one.
 
+         The <i>selector level scanner</i> uses the token scanner to retrieve \ref ESelector "selectors" the same way.
+         \ref NextSelector calls \c NextToken until it has retrieved a complete selector to return. 
+         \ref Selector returns the type of the last retrieved one, and \ref SelectorData retrieves a union that contains
+         the data for the last retrieved selector.
 
+         (The separation wasn't as clear when I started hacking at this, separating them now would be rather easy, but with marginal benefit,
+         especially since this is not a public interface.)
+      */
       class PathScanner
       {
+      public:
+         using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;  ///< union of the selector data for all selector types
+
       private:
-         PathArg    m_rpath;       // remainder of path to be scanned
-         PathBoundArgs m_args;     // list of arguments that should be used as tokens
-         size_t         m_argIdx;   // next argument index to fetch
-         TokenData   m_curToken;
+         PathArg    m_rpath;        // remainder of path to be scanned
+         PathBoundArgs m_args;      // list of arguments that should be used as tokens
+         size_t     m_argIdx;       // next argument index to fetch
+         TokenData  m_curToken;
 
          ESelector      m_selector = ESelector::None;
          tSelectorData  m_selectorData;

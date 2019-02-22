@@ -27,10 +27,12 @@ SOFTWARE.
 #include <yaml-cpp/yaml.h>
 #include <assert.h>
 
+/// namspace shared by yaml-cpp and yaml-path
 namespace YAML
 {
    namespace YamlPathDetail
    {
+      /// \internal helper to map enum values to names, used for diagnostics
       template <typename T2, typename TEnum>
       T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2())
       {
@@ -40,6 +42,7 @@ namespace YAML
          return dflt;
       }
 
+      /// \internal uses the same mapping as \ref MapValue to create diagnostic for a bit mask (e.g. created by \ref BitsOf)
       template <typename T2, typename TBit, typename TMask>
       std::string MapBitMask(TMask value, std::initializer_list<std::pair<TBit, T2>> values, T2 sep = ", ")
       {
@@ -60,6 +63,7 @@ namespace YAML
          return result.str();
       }
 
+      /// \internal name mapping for EToken
       std::initializer_list<std::pair<EToken, char const *>> MapETokenName =
       {
          { EToken::OpenBracket, "open bracket"},
@@ -72,6 +76,7 @@ namespace YAML
          { EToken::Index, "Index" },
       };
 
+      /// \internal name mapping for yaml-cpp node type
       std::initializer_list<std::pair<NodeType::value, char const *>> MapNodeTypeName =
       {
          { NodeType::Map, "map" },
@@ -81,6 +86,7 @@ namespace YAML
          { NodeType::Undefined, "(undefined)" },
       };
 
+      /// \internal name mapping for ESelector
       std::initializer_list<std::pair<ESelector, char const *>> MapESelectorName =
       {
          { ESelector::Index,  "index" },
@@ -90,6 +96,7 @@ namespace YAML
          { ESelector::Invalid, "(invalid)" },
       };
 
+      /// \internal name mapping for EPathError
       std::initializer_list<std::pair<EPathError, char const *>> MapEPathErrorName =
       {
          { EPathError::None ,             "(none)" },
@@ -103,14 +110,14 @@ namespace YAML
 
       // ----- Utility functions
 
-      /// Creates an undefined YAML node (<code>(bool)UndefinedNode() == false</code>)
+      /// C\internal reates an undefined YAML node (<code>(bool)UndefinedNode() == false</code>)
       Node UndefinedNode()
       {
          static auto undefinedNode = Node()["x"];
          return undefinedNode;
       }
 
-      /// result = target; target = newValue
+      /// \internal result = target; target = newValue
       template <typename T1, typename T2>
       T1 Exchange(T1 & target, T2 newValue)
       {
@@ -120,7 +127,7 @@ namespace YAML
       }
 
 
-      /** splits path at offset, 
+      /** \internal splits path at offset, 
           returning everything left of [offset], assigning everything right of it to \c path. 
       */
       PathArg SplitAt(PathArg & path, size_t offset)
@@ -136,16 +143,7 @@ namespace YAML
          return result;
       }
 
-      // ----- TokenScanner
-      EToken GetSingleCharToken(char c, std::initializer_list<std::pair<char, EToken>> values)
-      {
-         for (auto && v : values)
-            if (v.first == c)
-               return v.second;
-         return EToken::None;
-      }
-
-
+      /// \internal Helper used by \c NextToken etc to set m_curToken
       TokenData const & PathScanner::SetToken(EToken id, PathArg p)
       {
          // Generate error when ValidTokens are specified:
@@ -160,6 +158,7 @@ namespace YAML
          return m_curToken;
       }
 
+      /// \internal Helper used by \c NextToken etc to set m_curToken with an index value
       YAML::YamlPathDetail::TokenData const & PathScanner::SetToken(EToken id, size_t index)
       {
          m_curToken = { id, {}, index };
@@ -171,6 +170,7 @@ namespace YAML
          return m_curToken;
       }
 
+      /// \internal removes whitespace from the path
       void PathScanner::SkipWS()
       {
          // non-ascii chars are NOT considered whitespace
@@ -184,6 +184,8 @@ namespace YAML
          SkipWS();
       }
 
+      /** \internal removes the next token from the path and makes it the current one.
+      */
       TokenData const & PathScanner::NextToken()
       {
          if (m_rpath.empty())
@@ -194,13 +196,13 @@ namespace YAML
 
          // single-char special tokens
          char head = m_rpath[0];
-         EToken t = GetSingleCharToken(head, {
+         EToken t = MapValue(head, {
             { '.', EToken::Period },
             { '[', EToken::OpenBracket },
             { ']', EToken::CloseBracket },
             { '=', EToken::Equal },
             { '%', EToken::FetchArg },
-            });
+            }, EToken::None);
 
          if (t != EToken::None)
          {
@@ -226,6 +228,7 @@ namespace YAML
          return SetToken(EToken::UnquotedIdentifier, result);
       }
 
+      /** \internal Helper to indicate an error during token or selector parsing */
       EPathError PathScanner::SetError(EPathError error, uint64_t validTypes)
       {
          assert(error != EPathError::None);
@@ -248,6 +251,8 @@ namespace YAML
       }
 
       enum class EAsIndex { OK, NotAnIndex, IndexOverflow };
+
+      /** \internal tries to convert a string token to integer */
       EAsIndex AsIndex(std::string_view v, size_t & index)
       {
          size_t value = 0;
@@ -265,6 +270,13 @@ namespace YAML
          return EAsIndex::OK;
       }
 
+      /** \internal Used by the selector scanner to retrieve and process the next token
+         In addition to \c NextToken, this
+
+           - allows to put back one token by setting \c m_tokenPending to true
+           - checks if the token retrieved is one of the tokens supported, and sets an error if not
+           - converts the current token to an index if an index token is allowed, and the current string is convertable
+      */
       bool PathScanner::NextSelectorToken(uint64_t validTokens, EPathError error)
       {
          if (m_tokenPending)
@@ -308,6 +320,7 @@ namespace YAML
          return false;
       }
 
+      /** retrieves the next selector. */
       ESelector PathScanner::NextSelector()
       {
          // sticky on error
@@ -393,6 +406,7 @@ namespace YAML
 
    using namespace YamlPathDetail;
 
+   /** determines and caches one small part of the diagnostic message on demand */
    std::string PathException::ErrorItem() const
    {
       if (!m_errorItem.length() && m_errorType)
@@ -405,7 +419,10 @@ namespace YAML
       return m_errorItem;
    }
 
-   // ----- PathException
+   /** returns a diagnostic message. 
+       if \c detailed is true, the message contains information about the parser state (such as the error position, expected tokens, etc.) 
+       on multiple lines. Otherwise, it is a generic single-line message.
+   */
    std::string const & PathException::What(bool detailed) const
    {
       if (!m_short.length())
@@ -448,14 +465,14 @@ namespace YAML
       return m_detailed = str.str();
    }
 
+   /** returns a generic message for the \c error given */
    std::string PathException::GetErrorMessage(EPathError error)
    {
       return MapValue(error, MapEPathErrorName, "");
    }
 
 
-   /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid
-   */
+   /** validates the syntax of a YAML path. returns an error for invalid path, or EPathError::None, if the path is valid */
    EPathError PathValidate(PathArg p, std::string * valid, size_t * errorOffs)
    {
       PathException x;
@@ -473,6 +490,8 @@ namespace YAML
 
    namespace YamlPathDetail
    {
+
+      /** \internal determines if the resulting node is "matched". (this returning false is a stop condition for the scan) */
       bool IsMatch(Node node)
       {
          return !(!node ||
@@ -481,6 +500,7 @@ namespace YAML
             (node.IsMap() && node.size() == 0));
       }
 
+      /// \internal applies a key selector
       EPathError SeqMapByKey(Node & node, PathArg key, PathScanner & scan)
       {
          /**
@@ -510,6 +530,7 @@ namespace YAML
          return EPathError::None;
       }
 
+      // checks if a YAML map matches the requirements of a seq-map filter
       bool SeqMapFilterMatchElement(Node const & element, ArgSeqMapFilter const & arg)
       {
          if (!element.IsMap())
@@ -523,6 +544,7 @@ namespace YAML
                 (v.IsScalar() && v.as<std::string>() == *arg.value);
       }
 
+      // applies a seq-map filter to a seqiuence node
       EPathError SeqMapFilter(Node & node, ArgSeqMapFilter const & arg, PathScanner & scan)
       {
          Node newNode;
@@ -548,6 +570,29 @@ namespace YAML
       }
    } // namespace YamlPathDetail
 
+
+   /** Match a YAML path as far as possible
+
+      Matches nodes as long as a valid selector can be removed from the head of \c path and nodes can be matched.
+      See \ref Select for an introduction and documentation of YAML paths and selector matching.
+
+      \param node 
+        [in] the node where to start to match \c path \n
+        [out] the last node that could be matched
+
+      \param path
+        [in]  the path to match \n
+        [out] the remainder of the path that could not be matched
+
+      \param args
+        List of bound arguments, see the respective paragraph in \ref Select
+
+      \param  px
+        If not \c nullptr: receives detailed diagnostics if an error occurs.
+
+      \returns Error code that occurred during matching. \c EPathError::None if the entire path could be matched. 
+      You can uses \ref PathException::IsNodeError and \ref PathException::IsPathError to check what kind of error occurred.
+   */
    EPathError PathResolve(Node & node, PathArg & path, PathBoundArgs args, PathException * px)
    {
       PathScanner scan(path, args, px);
@@ -605,6 +650,19 @@ namespace YAML
       return EPathError::None;
    }
 
+   /** Selects one or more sub nodes from \c node, according to the specification in \c path
+
+      \par Error Handling
+
+      if \c path is malformed, an \ref PathException exception is thrown.\n
+
+      if no node can be selected (e.g. the index is out of range, or the node type can not be matched), an <i>invalid node</i> is returned.
+      Invalid nodes evaluate to false in a boolean context. Note that in yaml-cpp, there is a distinction between null nodes and invalid nodes.
+
+      \c Select may throw exceptions from yaml-cpp if \c node is malformed. It is intended to not throw such exceptions otherwise.
+
+      \sa Require, PathResolve, PathValidate
+   */
    Node Select(YAML::Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
@@ -618,6 +676,7 @@ namespace YAML
       throw x;
    }
 
+   /** Like \ref Select, except that it throws a \c PathException if no node can be matched */
    Node Require(YAML::Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
@@ -628,20 +687,4 @@ namespace YAML
       throw x;
    }
 
-
-
-
 } // namespace YAML
-
-
-/**
-
-\todo PathValidate, PathResolve etc. swallow some diagnostics. 
-      "CurrentException" needs to be replaced / refactored. 
-      PathResolve etc. should (optionally) provide diagnostics (both for parse errors, and node errors)
-
-\todo names:
-   - PathError is now a path-or-node error
-   - token scanner now scans both tokens and selectors
-   - Should "PathAt" be called" Select"?
-*/
