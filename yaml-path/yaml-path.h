@@ -112,22 +112,4 @@ namespace YAML
       mutable std::string m_detailed;
       mutable std::string m_errorItem;
    };
-
-   namespace YamlPathDetail
-   {
-      template <EPathError error> 
-      class PathExceptionT : public PathException
-      {
-         public: 
-            PathExceptionT(size_t offset, std::string value) : PathException(error, offset, value) {}
-      };
-   }
-
-   using PathInternalException = YamlPathDetail::PathExceptionT<EPathError::Internal>;
-   using PathInvalidTokenException = YamlPathDetail::PathExceptionT<EPathError::InvalidToken>;
-   using PathInvalidIndexException = YamlPathDetail::PathExceptionT<EPathError::InvalidIndex>;
-   using PathUnexpectedEndException = YamlPathDetail::PathExceptionT<EPathError::UnexpectedEnd>;
-
-   using PathInvalidNodeTypeException = YamlPathDetail::PathExceptionT<EPathError::InvalidNodeType>;
-   using PathNodeNotFoundException = YamlPathDetail::PathExceptionT<EPathError::NodeNotFound>;
 }

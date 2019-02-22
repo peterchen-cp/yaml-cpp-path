@@ -663,7 +663,7 @@ namespace YAML
 
       \sa Require, PathResolve, PathValidate
    */
-   Node Select(YAML::Node node, PathArg path, PathBoundArgs args)
+   Node Select(Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);
@@ -677,7 +677,7 @@ namespace YAML
    }
 
    /** Like \ref Select, except that it throws a \c PathException if no node can be matched */
-   Node Require(YAML::Node node, PathArg path, PathBoundArgs args)
+   Node Require(Node node, PathArg path, PathBoundArgs args)
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);
