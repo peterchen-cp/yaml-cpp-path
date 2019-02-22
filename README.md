@@ -17,7 +17,7 @@ That uses `path` (a string) to select one or more nodes from `n`.
 e.g.
 
 ```c++
-// example data: a lost of people wiht some attributes
+// example data: 
 Nore root = Load(R"(
 -  name : Joe
    color: red
@@ -44,21 +44,25 @@ a `Node`. All symbols are defined in the `YAML` namespace.
 
 **Status:**  
 
-Under development, but functional. A little more information can be found in `yaml-path\readme.txt`. Additional documentation is virtually non-existing.
+Used in production. currently implements the initially required/envisioned features, some ideas are pending.
+`yaml-path\readme.txt`
 
 
 ## Getting Started
 
-The folder `yaml-path` contains all the sources that you need to add to your project. It's one .cpp and two headers.  
+The folder `yaml-path` contains all the sources that you need to add to your project.
 Make sure `#include <yaml-cpp/yaml.h>` finds the yaml-cpp headers, and link to the yaml-cpp library.  
 
 `test.cpp` contains tests, using [doctest](https://github.com/onqtam/doctest).  
 
 There is no make script.  
 The "msvc" branch contains a MSVC 2017 project that includes a snapshot of yaml-cpp and doctest. 
-It's always ahead of master, and matches the current master (I'm not expecting many changes there, though)
+It's always ahead of master, and matches the current master (in other words, there's real history of that)
 
+In the github "Releases" section, you find 
 
+ - doxygen documentation, including full specification of selectors
+ - a precompiled Windows x86binary that allows to test and play around with yaml paths.
 
 
 ## License
