@@ -199,8 +199,13 @@ void CYAPATEDlg::UpdateOutput()
    if (m_fileError.GetLength())
    {
       SetDlgItemText(IDC_ED_RESULT, CString(_T("Source YAML Error:")) + m_fileError);
+      SetDlgItemText(IDC_ST_PERF, _T(""));
       return;
    }
+
+   static LARGE_INTEGER qpcTicksPerSec = { 0 };
+   if (!qpcTicksPerSec.QuadPart)
+      QueryPerformanceFrequency(&qpcTicksPerSec);
 
    CString strResult;
 
@@ -213,26 +218,33 @@ void CYAPATEDlg::UpdateOutput()
    auto u8path = Utf8(strPath);
    YAML::PathArg path = u8path;
 
+   LARGE_INTEGER qpcStart = { 0 }, qpcEnd = { 0 };
    try
    {
       const int method = m_ddMethod.GetItemData(m_ddMethod.GetCurSel());
       if (method == emSelect)
       {
+         QueryPerformanceCounter(&qpcStart);
          auto node = YAML::Select(m_yfile, path);
+         QueryPerformanceCounter(&qpcEnd);
          strResult = _T("SELECT: OK\r\n---\r\n");
          strResult += ToString(node);
       }
       else if (method == emRequire)
       {
+         QueryPerformanceCounter(&qpcStart);
          auto node = YAML::Require(m_yfile, path);
+         QueryPerformanceCounter(&qpcEnd);
          strResult = _T("Require: OK\r\n---\r\n");
          strResult += ToString(node);
       }
       else if (method == emPathResolve)
       {
+         QueryPerformanceCounter(&qpcStart);
          YAML::Node ynode = m_yfile;
          YAML::PathException x;
          YAML::PathResolve(ynode, path, {}, &x);
+         QueryPerformanceCounter(&qpcEnd);
 
          strResult = _T("PathResolve:");
          if (x.Error() != YAML::EPathError::None)
@@ -244,9 +256,11 @@ void CYAPATEDlg::UpdateOutput()
       }
       else if (method == emPathValidate)
       {
+         QueryPerformanceCounter(&qpcStart);
          std::string valid;
          size_t errOffs = 0;
          auto err = YAML::PathValidate(path, &valid, &errOffs);
+         QueryPerformanceCounter(&qpcEnd);
          if (err == YAML::EPathError::None)
             strResult = "path is valid";
          else
@@ -260,6 +274,14 @@ void CYAPATEDlg::UpdateOutput()
    }
 
    SetDlgItemText(IDC_ED_RESULT, strResult);
+
+   CString duration;
+   if (qpcTicksPerSec.QuadPart && qpcEnd.QuadPart)  // queryPerformanceCounter is working... and no exception! yay!
+   {
+      double seconds = double(qpcEnd.QuadPart - qpcStart.QuadPart) / double(qpcTicksPerSec.QuadPart);
+      duration.Format(_T("duration: %.3f ms"), seconds*1000);
+   }
+   SetDlgItemText(IDC_ST_PERF, duration);
 }
 
 
