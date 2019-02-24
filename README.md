@@ -65,6 +65,95 @@ In the github "Releases" section, you find
  - a precompiled Windows x86binary that allows to test and play around with yaml paths.
 
 
+ ## Examples
+
+
+ For a YAML document of 
+
+	- name: Joe
+	  color: red
+	  friends: ~
+	- name: Sina
+	  color: blue
+	- name: Estragon
+	  color: red
+	  friends:
+		Wladimir: good
+		Godot: unreliable
+
+this is a list of example paths and the nodes they return:
+
+**Path:** `"name"` 
+
+    - Joe
+    - Sina
+    - Estragon
+
+**Path:** `"[1].name"`
+
+    Sina
+
+**Path:** `"name[2]"`
+
+    Estragon
+
+**Path:** `"color"`
+
+    - red
+    - blue
+    - red
+
+**Path:** `"[color=red]"`
+
+	- name: Joe
+	  color: red
+	  friends: ~
+	- name: Estragon
+	  color: red
+	  friends:
+		Wladimir: good
+		Godot: unreliable
+
+**Path:** `"[color=blue]"`
+
+    - name: Sina
+      color: blue
+
+
+**Path:** `"[friends=]"`
+
+	- name: Joe
+	  color: red
+	  friends: ~
+	- name: Estragon
+	  color: red
+	  friends:
+		Wladimir: good
+		Godot: unreliable
+
+**Path:** `"friends.Wladimir"`
+
+    - good
+
+**Path:** `"friends.Wladimir[0]"`
+
+    unreliable
+
+**Path:** `"[1]"`
+
+    - name: Sina
+      color: blue
+
+
+**Path:** `"[1].color"`
+
+      blue
+
+
+
+
+
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details

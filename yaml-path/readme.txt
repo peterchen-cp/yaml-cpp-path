@@ -21,20 +21,6 @@ Ideas:
 		%1, %2 etc. to explicitely request the first, second argument. 
 		(Make sure the syntax is unambigous, so that there's no construct where %23 could mean "%, then the noext token is 23")
 
-	Binding a std::function<Node(const Node &)>
-		
-		e.g. to fetch each second item from a sequence, use
-		Select(node, "%", 
-		{
-			[](Node const & n) -> Node { Node result; for(i=0; i<n,size(); ++i) if (!i%2) result.push_back(n[i]); return result; }
-		});
-
-	Partial Match
-		Some tokens might allow wildcards, or at least end in a wild card: * for zero-or more, + for one-or more
-		[key=v+] would accept all maps where node["key"] starts with "v"
-			
-		could be exptended to other tokens (key selector, key of a seq-map filter)
-
 	Case Insensitive Match
 		using allowing case insensitive mathes at least for seq-map filter values, e.g. 
 		Select(node, "[key=^value]")			
