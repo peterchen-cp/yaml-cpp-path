@@ -1,7 +1,9 @@
+#include "yaml-path/yaml-accumulate.h"
 #include "yaml-path/yaml-path.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
+
 #include <yaml-cpp/yaml.h>
 #include <yaml-path/yaml-path.h>
 #include <yaml-path/yaml-path-internals.h>
@@ -418,4 +420,34 @@ TEST_CASE("PathResolve - SeqMapFilter")
       CHECK(node[0]["name"].as<S>() == "Sina");
       CHECK(node[1]["name"].as<S>() == "Estragon");
    }
+}
+
+
+TEST_CASE("Accumulate (simple, tests AccumulateRefOp)")
+{
+   {
+      auto n = Load("[2, 3, 4, 5]");
+      int result = Accumulate<int>(n, 1);
+      CHECK(result == 15);
+   }
+
+
+   {
+      auto n = Load("{ a : 2, b : 3, c : 4, d : 5}");
+      int result = Accumulate<int>(n, 1);
+      CHECK(result == 15);
+   }
+
+   {
+      auto n = Load("23");
+      int result = Accumulate<int>(n, 17);
+      CHECK(result == 40);
+   }
+}
+
+TEST_CASE("Accumulate with custom op")
+{
+   auto n = Load("[2, 3, 4, 5]");
+   int result = Accumulate<int>(n, 1, [](int a, int b) {return a * b; });
+   CHECK(result == 120);
 }
