@@ -74,6 +74,7 @@ namespace YAML
          { EToken::QuotedIdentifier, "quoted identifier" },
          { EToken::UnquotedIdentifier, "unquoted identifier" },
          { EToken::Index, "Index" },
+         { EToken::FetchArg, "bound argument" },
       };
 
       /// \internal name mapping for yaml-cpp node type
