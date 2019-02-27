@@ -1,12 +1,13 @@
 #include "yaml-path/yaml-accumulate.h"
 #include "yaml-path/yaml-path.h"
 
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
 
 #include <yaml-cpp/yaml.h>
 #include <yaml-path/yaml-path.h>
 #include <yaml-path/yaml-path-internals.h>
+#include <iostream>
 
 using namespace YAML;
 
@@ -450,4 +451,138 @@ TEST_CASE("Accumulate with custom op")
    auto n = Load("[2, 3, 4, 5]");
    int result = Accumulate<int>(n, 1, [](int a, int b) {return a * b; });
    CHECK(result == 120);
+}
+
+
+
+bool is(char const * a, char const * b) { return _stricmp(a, b) == 0; }
+bool is(char const * a, char const * b, char const * balt) { return is(a,b) || (balt && is(a,balt)); }
+
+int main(int argc, char ** argv)
+{
+   auto is_ = [&](int argidx, char const * b, char const * balt = nullptr)
+   {
+      return argc > argidx && is(argv[argidx], b, balt);
+   };
+
+   if (is_(1, "--runtests", "-r"))
+      return doctest::Context(argc-1, argv+1).run();
+
+   if (argc == 1 || (argc == 2 && is_(1, "--help", "-h")))
+   {
+      std::cout << R"(Options:
+ --runtest, -r   (must be first) Run unit tests. all following arguments are passed to doctest.
+
+ --help, -h      (must be the only argument) show this help
+
+ <YAMLFile> <path> [-v|--verbose] [<command>]
+
+   Run a YAML path command against the specified YAML
+
+   YAMLFile can be: 
+
+                  a path to a YAML file,
+       *          for the embedded YAML sample,
+       *<yaml>    where <yaml> is a raw YAML string
+
+   <path> is a YAML path
+
+   -v to enable verbose output, appending secondary data and diagnostics
+
+   <command> is the command to run 
+     Select or S (default)
+     Require or R
+     PathResolve or P
+     PathValidate or V
+)";
+      return 0;
+   }
+
+   if (argc >= 2 && argc <= 5)
+   {
+      const bool verbose = is_(3, "--verbose", "-v");
+
+      try
+      {
+         YAML::Node root;
+         char const * sroot = argv[1];
+
+         if (*sroot == '*')
+         {
+            ++sroot;
+            if (*sroot)
+               root = YAML::Load(sroot);
+            else
+               root = YAML::Load(R"(
+-  name : Joe
+   color: red
+   friends : ~
+-  name : Sina
+   color: blue
+-  name : Estragon
+   color : red
+   friends :
+      Wladimir : good
+      Godot : unreliable)");
+         }
+         else
+            root = YAML::LoadFile(sroot);
+
+         char const * yamlPath = "";
+         if (argc >= 3)
+            yamlPath = argv[2];
+
+         int cmdidx = verbose ? 4 : 3;
+         if (is_(cmdidx, "S", "Select") || argc <= cmdidx || is_(cmdidx, ""))    // Select
+         {
+            auto result = YAML::Select(root, yamlPath);
+            std::cout << (YAML::Emitter() << result).c_str() << "\n";
+         }
+         else if (is_(cmdidx, "R", "Require"))
+         {
+            auto result = YAML::Require(root, yamlPath);
+            std::cout << (YAML::Emitter() << result).c_str() << "\n";
+         }
+         else if (is_(cmdidx, "P", "PathResolve"))
+         {
+            YAML::PathException x;
+            YAML::PathArg path = yamlPath;
+            auto result = PathResolve(root, path, {}, verbose ? &x : nullptr);
+
+            std::cout << (YAML::Emitter() << root).c_str() << "\n";
+
+            if (verbose)
+            {
+               std::cout << "---\n";
+               if (result != YAML::EPathError::None)
+                  std::cout << "DIAGS: " << x.what();
+               else
+                  std::cout << "DIAGS: OK\n";
+
+               std::cout << "---\n"
+                  << "remaining path: " << std::string(path);
+            }
+         }
+         else if (is_(cmdidx, "V", "PathValidate"))
+         {
+            YAML::PathException x;
+            std::string valid;
+            size_t erroffs = 0;
+            auto result = YAML::PathValidate(yamlPath, &valid, &erroffs);
+
+            std::cout << "---\n" << YAML::PathException::GetErrorMessage(result) << "\n"
+               << "valid path: " << valid << "\n"
+               << "error offset: " << erroffs << "\n";
+         }
+         else
+            throw std::exception("unknown command");
+      }
+      catch (std::exception const & x)
+      {
+         if (verbose)
+            std::cout << "---\nERROR: " << x.what() << "\n";
+      }
+   }
+   else
+      std::cout << "unknown arguments. use -h for help.\n";
 }
