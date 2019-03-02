@@ -35,6 +35,7 @@ void CYAPATEDlg::DoDataExchange(CDataExchange* pDX)
    DDX_Control(pDX, IDC_ED_FILE, m_edFile);
    DDX_Control(pDX, IDC_DD_PATH, m_ddPath);
    DDX_Control(pDX, IDC_DD_METHOD, m_ddMethod);
+   DDX_Control(pDX, IDC_ED_RESULT, m_edResult);
 }
 
 BEGIN_MESSAGE_MAP(CYAPATEDlg, CDialog)
@@ -63,6 +64,8 @@ BOOL CYAPATEDlg::OnInitDialog()
 
    m_edFile.SetEventMask(m_edFile.GetEventMask() | ENM_CHANGE);
    m_edFile.SetWindowText(CString(initialText));
+   m_edFile.LimitText(1024 * 1024 * 1024);
+   m_edResult.LimitText(1024 * 1024 * 1024);
 
    m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Select")), emSelect);
    m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Require")), emRequire);
@@ -198,7 +201,7 @@ void CYAPATEDlg::UpdateOutput()
 {
    if (m_fileError.GetLength())
    {
-      SetDlgItemText(IDC_ED_RESULT, CString(_T("Source YAML Error:")) + m_fileError);
+      m_edResult.SetWindowText(CString(_T("Source YAML Error:")) + m_fileError);
       SetDlgItemText(IDC_ST_PERF, _T(""));
       return;
    }
@@ -247,7 +250,7 @@ void CYAPATEDlg::UpdateOutput()
          QueryPerformanceCounter(&qpcEnd);
 
          strResult = _T("PathResolve:");
-         if (x.Error() != YAML::EPathError::None)
+         if (x.Error() != YAML::EPathError::OK)
             strResult = strResult + _T("\r\n") + FromUtf8(x.What(true).c_str()) + CString(_T("\r\nthe last matched node was:\r\n---\r\n"));
          else
             strResult += _T("OK (entire path could be resolved)\r\n---\r\n");
@@ -261,7 +264,7 @@ void CYAPATEDlg::UpdateOutput()
          size_t errOffs = 0;
          auto err = YAML::PathValidate(path, &valid, &errOffs);
          QueryPerformanceCounter(&qpcEnd);
-         if (err == YAML::EPathError::None)
+         if (err == YAML::EPathError::OK)
             strResult = "path is valid";
          else
             strResult.Format(_T("Invalid path: %s\r\n  valid part: %s\r\n  error offset: %d\r\n"), 
@@ -273,7 +276,7 @@ void CYAPATEDlg::UpdateOutput()
       strResult = CString(_T("Error:")) + FromUtf8(e.what());
    }
 
-   SetDlgItemText(IDC_ED_RESULT, strResult);
+   m_edResult.SetWindowText(strResult);
 
    CString duration;
    if (qpcTicksPerSec.QuadPart && qpcEnd.QuadPart)  // queryPerformanceCounter is working... and no exception! yay!

@@ -41,6 +41,7 @@ private:
    CString m_fileError;
 public:
    CRichEditCtrl m_edFile;
+   CRichEditCtrl m_edResult;
    CComboBox m_ddMethod;
    CComboBox m_ddPath;
    afx_msg void OnCbnSelchangeDdMethod();
