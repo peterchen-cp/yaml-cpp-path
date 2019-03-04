@@ -129,7 +129,7 @@ namespace YAML
          bool           m_periodAllowed = false;         ///< next token may be a period 
          bool           m_selectorRequired = false;      ///< another selector is required for a well-formed path (e.g. after "abc.")
 
-         EPathError     m_error = EPathError::None;
+         EPathError     m_error = EPathError::OK;
          PathArg       m_fullPath;
          PathException * m_diags = nullptr;
 
@@ -150,7 +150,7 @@ namespace YAML
       public:
          PathScanner(PathArg p, PathBoundArgs args = {}, PathException * diags = nullptr);
 
-         explicit operator bool() const { return !m_rpath.empty() && m_error == EPathError::None; }
+         explicit operator bool() const { return !m_rpath.empty() && m_error == EPathError::OK; }
 
          auto Error() const            { return m_error; }
          auto const & Right() const    { return m_rpath; }                             ///< remainder (unscanned part)

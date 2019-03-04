@@ -30,6 +30,100 @@ SOFTWARE.
 /// namspace shared by yaml-cpp and yaml-path
 namespace YAML
 {
+
+   EPathError SelectByKey(Node & node, PathArg key)
+   {
+      // possible optimizations: reserve for a node sequence, node[string_view] without copy-to-string
+      if (node.IsMap())
+      {
+         Node result = node[std::string(key)];
+         if (!result)
+            return EPathError::NodeNotFound;
+
+         node.reset(result);
+         return EPathError::OK;
+      }
+      else if (node.IsSequence())
+      {
+         Node result;
+         for (auto && el : node)
+         {
+            Node val = el[std::string(key)];
+            if (val)
+               result.push_back(val);
+         }
+         if (!result.IsSequence())    // first call to push-back turns this into a sequence
+            return EPathError::NodeNotFound;
+         node.reset(result);
+         return EPathError::OK;
+      }
+      return EPathError::InvalidNodeType;
+   }
+
+   namespace YamlPathDetail
+   {
+      // checks if a YAML map matches the requirements of a seq-map filter
+      bool SeqMapFilterMatchElement(Node const & element, std::string key, std::optional<PathArg> value)
+      {
+         // performance optimization: if key lookup can be done with string_view, pass key as PathArg
+
+         if (!element.IsMap())
+            return false;
+
+         auto v = element[key];
+         if (!v)
+            return false;
+
+         return !value ||    // if no required value is given, any value accepted as long as key exists
+            (v.IsScalar() && v.as<std::string>() == *value);
+      }
+   }
+
+   EPathError SelectBySeqMapFilter(Node & node, PathArg key, std::optional<PathArg> value)
+   {
+      Node newNode;
+      if (node.IsSequence())
+      {
+         std::string key_(key);
+         for (auto && el : node)
+            if (YamlPathDetail::SeqMapFilterMatchElement(el, key_, value))
+               newNode.push_back(el);
+      }
+      else if (node.IsMap())
+      {
+         if (YamlPathDetail::SeqMapFilterMatchElement(node, std::string(key), value))
+            newNode = node;
+      }
+      else
+         return EPathError::InvalidNodeType;
+
+      if (newNode.IsNull())
+         return EPathError::NodeNotFound;
+
+      node.reset(newNode);
+      return EPathError::OK;
+   }
+
+   EPathError SelectByIndex(Node & node, size_t index)
+   {
+      if (node.IsScalar() || node.IsMap())
+      {
+         if (index != 0)
+            return EPathError::NodeNotFound;
+         return EPathError::OK;     // for scalar node and map, [0] remains at the same node
+      }
+      if (node.IsSequence())
+      {
+         if (index >= node.size())
+            return EPathError::NodeNotFound;
+
+         node.reset(node[index]);
+         return EPathError::OK;
+      }
+      return EPathError::InvalidNodeType;
+   }
+
+
    namespace YamlPathDetail
    {
       /// \internal helper to map enum values to names, used for diagnostics
@@ -100,7 +194,7 @@ namespace YAML
       /// \internal name mapping for EPathError
       std::initializer_list<std::pair<EPathError, char const *>> MapEPathErrorName =
       {
-         { EPathError::None ,             "(none)" },
+         { EPathError::OK ,               "(OK)" },
          { EPathError::Internal,          "(internal, please report)" },
          { EPathError::InvalidIndex,      "invalid index" },
          { EPathError::InvalidNodeType,   "selector cannot not match node type" },
@@ -192,7 +286,7 @@ namespace YAML
          if (m_rpath.empty())
             return SetToken(EToken::None, PathArg());
 
-         if (m_error != EPathError::None)
+         if (m_error != EPathError::OK)
             return m_curToken;
 
          // single-char special tokens
@@ -232,7 +326,7 @@ namespace YAML
       /** \internal Helper to indicate an error during token or selector parsing */
       EPathError PathScanner::SetError(EPathError error, uint64_t validTypes)
       {
-         assert(error != EPathError::None);
+         assert(error != EPathError::OK);
          m_error = error;
          if (m_diags)
          {
@@ -325,7 +419,7 @@ namespace YAML
       ESelector PathScanner::NextSelector()
       {
          // sticky on error
-         if (m_error != EPathError::None)
+         if (m_error != EPathError::OK)
             return ESelector::Invalid;
 
          if (m_diags)
@@ -429,7 +523,7 @@ namespace YAML
       if (!m_short.length())
          m_short = GetErrorMessage(m_error);
 
-      if (!detailed || m_error == EPathError::None)
+      if (!detailed || m_error == EPathError::OK)
          return m_short;
 
       if (m_detailed.length())
@@ -489,89 +583,7 @@ namespace YAML
       return scan.Error(); 
    }
 
-   namespace YamlPathDetail
-   {
-
-      /** \internal determines if the resulting node is "matched". (this returning false is a stop condition for the scan) */
-      bool IsMatch(Node node)
-      {
-         return !(!node ||
-            node.IsNull() ||
-            (node.IsSequence() && node.size() == 0) ||
-            (node.IsMap() && node.size() == 0));
-      }
-
-      /// \internal applies a key selector
-      EPathError SeqMapByKey(Node & node, PathArg key, PathScanner & scan)
-      {
-         /**
-         \todo Optimization: YAML::Node could uses a reserve
-         \todo Optimization: convert<string_view> without copy to string
-         */
-         YAML::Node newNode;
-         if (node.IsSequence())
-         {
-            for (auto && el : node)
-               if (el.IsMap())
-               {
-                  Node value = el[std::string(key)];
-                  if (value)
-                     newNode.push_back(value);
-               }
-         }
-         else if (node.IsMap())
-            newNode = node[std::string(key)];
-         else
-            return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Sequence | NodeType::Map }));
-
-         if (!IsMatch(newNode))
-            return scan.SetError(EPathError::NodeNotFound);
-
-         node.reset(newNode);
-         return EPathError::None;
-      }
-
-      // checks if a YAML map matches the requirements of a seq-map filter
-      bool SeqMapFilterMatchElement(Node const & element, ArgSeqMapFilter const & arg)
-      {
-         if (!element.IsMap())
-            return false;
-
-         auto v = element[std::string(arg.key)];
-         if (!v)
-            return false;
-
-         return !arg.value ||    // if no required value is given, any value accepted as long as key exists
-                (v.IsScalar() && v.as<std::string>() == *arg.value);
-      }
-
-      // applies a seq-map filter to a seqiuence node
-      EPathError SeqMapFilter(Node & node, ArgSeqMapFilter const & arg, PathScanner & scan)
-      {
-         Node newNode;
-         if (node.IsSequence())
-         {
-            for (auto && el : node)
-               if (SeqMapFilterMatchElement(el, arg))
-                  newNode.push_back(el);
-         }
-         else if (node.IsMap())
-         {
-            if (SeqMapFilterMatchElement(node, arg))
-               newNode = node;
-         }
-         else
-            return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Sequence | NodeType::Map }));
-
-         if (!IsMatch(newNode))
-            return scan.SetError(EPathError::NodeNotFound);
-
-         node.reset(newNode);
-         return EPathError::None;
-      }
-   } // namespace YamlPathDetail
-
-
+   
    /** Match a YAML path as far as possible
 
       Matches nodes as long as a valid selector can be removed from the head of \c path and nodes can be matched.
@@ -608,34 +620,23 @@ namespace YAML
          switch (scan.NextSelector())
          {
             case ESelector::Key:
-            if (auto err = SeqMapByKey(node, scan.SelectorData<ArgKey>().key, scan); err != EPathError::None)
-               return err;
+               if (auto err = SelectByKey(node, scan.SelectorData<ArgKey>().key); err != EPathError::OK)
+                  return scan.SetError(err);
             continue;
 
             case ESelector::Index:
             {
                size_t index = scan.SelectorData<ArgIndex>().index;
-               if (node.IsScalar() || node.IsMap())
-               {
-                  if (index != 0)   // for scalar node, [0] sticks to the node
-                     return scan.SetError(EPathError::NodeNotFound);
-                  continue;
-               }
-               if (node.IsSequence())
-               {
-                  if (index >= node.size())
-                     return scan.SetError(EPathError::NodeNotFound);
-
-                  node.reset(node[index]);
-                  continue;
-               }
-               return scan.SetError(EPathError::InvalidNodeType, BitsOf({ NodeType::Scalar, NodeType::Sequence }));
+               if (auto err = SelectByIndex(node, index); err != EPathError::OK)
+                  return scan.SetError(err);
+               continue;
             }
 
             case ESelector::SeqMapFilter:
             {
-               if (auto err = SeqMapFilter(node, scan.SelectorData<ArgSeqMapFilter>(), scan); err != EPathError::None)
-                  return err;
+               auto && arg = scan.SelectorData<ArgSeqMapFilter>();
+               if (auto err = SelectBySeqMapFilter(node, arg.key, arg.value); err != EPathError::OK)
+                  return scan.SetError(err);
                continue;
             }
 
@@ -648,7 +649,7 @@ namespace YAML
          }
       }
       path = scan.Right();
-      return EPathError::None;
+      return EPathError::OK;
    }
 
    /** Selects one or more sub nodes from \c node, according to the specification in \c path
@@ -668,7 +669,7 @@ namespace YAML
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);
-      if (err == EPathError::None)
+      if (err == EPathError::OK)
          return node;
 
       if (x.IsNodeError())
@@ -682,7 +683,7 @@ namespace YAML
    {
       PathException x;
       auto err = PathResolve(node, path, args, &x);
-      if (err == EPathError::None)
+      if (err == EPathError::OK)
          return node;
 
       throw x;

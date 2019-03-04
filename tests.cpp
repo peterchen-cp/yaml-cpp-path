@@ -22,6 +22,71 @@ namespace YAML
    }
 }
 
+TEST_CASE("SelectByKey")
+{
+   {
+      Node n = Load("{ A : aa, B : bb }"); 
+      CHECK(SelectByKey(n, "A") == EPathError::OK);
+      CHECK(n.as<std::string>() == "aa");
+   }
+
+   {
+      Node n = Load("[ { A : aa, B : bb }, { X : xx, A : aaa } ]");
+      CHECK(SelectByKey(n, "A") == EPathError::OK);
+      CHECK(n.IsSequence());
+      CHECK(n.size() == 2);
+      CHECK(n[0].as<std::string>() == "aa");
+      CHECK(n[1].as<std::string>() == "aaa");
+   }
+
+   {
+      Node n = Load("{ A : aa, B : bb }");
+      CHECK(SelectByKey(n, "X") == EPathError::NodeNotFound);
+   }
+
+   {
+      Node n = Load("abcd");
+      CHECK(SelectByKey(n, "X") == EPathError::InvalidNodeType);
+   }
+}
+
+TEST_CASE("SelectByIndex")
+{
+   {
+      Node n = Load("[1, 2, 3, 4]");
+      CHECK(SelectByIndex(n, 0) == EPathError::OK);
+      CHECK(n.as<std::string>() == "1");
+   }
+
+   {
+      Node n = Load("[1, 2, 3, 4]");
+      CHECK(SelectByIndex(n, 3) == EPathError::OK);
+      CHECK(n.as<std::string>() == "4");
+   }
+
+   {
+      Node n = Load("[1, 2, 3, 4]");
+      CHECK(SelectByIndex(n, 7) == EPathError::NodeNotFound);
+      CHECK(n.IsSequence());
+   }
+
+   {
+      Node n = Load("abcd");
+      CHECK(SelectByIndex(n, 0) == EPathError::OK);
+      CHECK(n.as<std::string>() == "abcd");
+   }
+
+   {
+      Node n = Load("abcd");
+      CHECK(SelectByIndex(n, 1) == EPathError::NodeNotFound);
+      CHECK(n.as<std::string>() == "abcd");
+   }
+
+}
+
+
+
+
 // ---- parse level 0: SplitAt, Split
 TEST_CASE("Internal: SplitAt")
 {
@@ -193,12 +258,12 @@ TEST_CASE("ScanSelector - bound arguments")
 
 TEST_CASE("PathValidate")
 {
-   CHECK(PathValidate("") == EPathError::None);
-   CHECK(PathValidate("a") == EPathError::None);
-   CHECK(PathValidate("a.b") == EPathError::None);
-   CHECK(PathValidate("a.[2]") == EPathError::None);
-   CHECK(PathValidate("a[2]") == EPathError::None);
-   CHECK(PathValidate("[2]") == EPathError::None);
+   CHECK(PathValidate("") == EPathError::OK);
+   CHECK(PathValidate("a") == EPathError::OK);
+   CHECK(PathValidate("a.b") == EPathError::OK);
+   CHECK(PathValidate("a.[2]") == EPathError::OK);
+   CHECK(PathValidate("a[2]") == EPathError::OK);
+   CHECK(PathValidate("[2]") == EPathError::OK);
 
    CHECK(PathValidate("~") == EPathError::InvalidToken);
    CHECK(PathValidate("[2[") == EPathError::InvalidToken);
@@ -309,7 +374,7 @@ TEST_CASE("PathResolve - SeqMap")
    {
       auto node = YAML::Load(sroot);
       PathArg path = "name";
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 3);
@@ -321,7 +386,7 @@ TEST_CASE("PathResolve - SeqMap")
    {
       auto node = YAML::Load(sroot);
       PathArg path = "voice";
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 1);
@@ -360,7 +425,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    {  // has 3 nodes with any "name"
       auto node = YAML::Load(sroot);
       PathArg path = "[name=]"; // all having a name
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 3);
@@ -394,7 +459,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    {  // has two nodes with any "place"
       auto node = YAML::Load(sroot);
       PathArg path = "[place=]";
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 2);
@@ -405,7 +470,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    {  // has three nodes with any color
       auto node = YAML::Load(sroot);
       PathArg path = "[color=]";
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 3);
@@ -414,7 +479,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    {  // has three nodes with color "blue"
       auto node = YAML::Load(sroot);
       PathArg path = "[color=blue]";
-      CHECK(PathResolve(node, path) == EPathError::None);
+      CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
       CHECK(node.size() == 2);
@@ -554,7 +619,7 @@ int main(int argc, char ** argv)
             if (verbose)
             {
                std::cout << "---\n";
-               if (result != YAML::EPathError::None)
+               if (result != YAML::EPathError::OK)
                   std::cout << "DIAGS: " << x.what();
                else
                   std::cout << "DIAGS: OK\n";
