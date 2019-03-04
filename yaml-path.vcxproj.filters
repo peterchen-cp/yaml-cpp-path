@@ -296,6 +296,9 @@
     <ClInclude Include="yaml-path\yaml-path-internals.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="yaml-path\yaml-accumulate.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="yaml-cpp\src\yaml-cpp.natvis" />

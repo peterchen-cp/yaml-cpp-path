@@ -413,6 +413,7 @@
     <ClInclude Include="yaml-cpp\stlemitter.h" />
     <ClInclude Include="yaml-cpp\traits.h" />
     <ClInclude Include="yaml-cpp\yaml.h" />
+    <ClInclude Include="yaml-path\yaml-accumulate.h" />
     <ClInclude Include="yaml-path\yaml-path.h" />
     <ClInclude Include="yaml-path\yaml-path-internals.h" />
   </ItemGroup>
