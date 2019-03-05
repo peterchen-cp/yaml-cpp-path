@@ -93,6 +93,7 @@ namespace YAML
          Key,
          Index,
          SeqMapFilter,
+         KeyList,
       };
 
       // Data for different selector types
@@ -101,6 +102,7 @@ namespace YAML
       struct ArgIndex { size_t index; };
       struct ArgKVPair { PathArg key; std::optional<PathArg> value; };     // used in some selectors
       using ArgSeqMapFilter = ArgKVPair; 
+      using ArgKeyList = std::vector<ArgKVPair>;
 
       /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select
          This class implements two layers of the scan: 
