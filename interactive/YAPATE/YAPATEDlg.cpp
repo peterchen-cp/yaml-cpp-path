@@ -78,9 +78,9 @@ BOOL CYAPATEDlg::OnInitDialog()
    m_ddPath.AddString(_T("[1].name"));
    m_ddPath.AddString(_T("name[2]"));
    m_ddPath.AddString(_T("color"));
-   m_ddPath.AddString(_T("[color=red]"));
-   m_ddPath.AddString(_T("[color=blue]"));
-   m_ddPath.AddString(_T("[friends=]"));
+   m_ddPath.AddString(_T("{color=red}"));
+   m_ddPath.AddString(_T("{color=blue}"));
+   m_ddPath.AddString(_T("{friends=}"));
    m_ddPath.AddString(_T("friends.Wladimir"));
    m_ddPath.AddString(_T("friends.Godot[0]"));
    m_ddPath.AddString(_T("[1]"));
