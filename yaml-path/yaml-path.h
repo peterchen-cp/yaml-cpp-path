@@ -27,6 +27,7 @@ SOFTWARE.
 #include <string_view>
 #include <variant>
 #include <optional>
+#include <yaml-cpp/node/node.h>
 
 namespace YAML
 {
@@ -41,20 +42,27 @@ namespace YAML
    using PathArg = std::string_view;
    enum class EPathError;
 
-   /** 
-   */
+
    using PathBoundArg = std::variant<size_t, PathArg>;         ///< bound argument for a YAML path. See \ref Select
    using PathBoundArgs = std::initializer_list<PathBoundArg>;  ///< list of bound arguments, see \ref Select
+
+   EPathError SelectByKey(Node & node, PathArg key);
+   EPathError SelectBySeqMapFilter(Node & node, PathArg key, std::optional<PathArg> value);
+   EPathError SelectByIndex(Node & node, size_t index);
 
    Node Select(Node node, PathArg path, PathBoundArgs args = {}); ///< Select a node
    Node Require(Node node, PathArg path, PathBoundArgs args = {});
    EPathError PathValidate(PathArg p, std::string * valid = 0, size_t * errorOffs = 0);
    EPathError PathResolve(Node & node, PathArg & path, PathBoundArgs args = {}, PathException * px = 0);
 
+
+  
+   EPathError SelectByKey(Node & node, PathArg key);
+
    /** Error code used by yaml-path. For Information on error handling, see \ref PathException */
    enum class EPathError
    {
-      None = 0,
+      OK = 0,
       Internal,
 
       // parsing errors
@@ -91,12 +99,12 @@ namespace YAML
 
       static std::string GetErrorMessage(EPathError error);
       static bool IsNodeError(EPathError error) { return error >= EPathError::FirstNodeError_; }   ///< true if \c error indicates failure to find a matching node
-      static bool IsPathError(EPathError error) { return error < EPathError::FirstNodeError_ && error != EPathError::None; }  ///< true if \c error indicates a malformed path
+      static bool IsPathError(EPathError error) { return error < EPathError::FirstNodeError_ && error != EPathError::OK; }  ///< true if \c error indicates a malformed path
 
    private:
       friend class YamlPathDetail::PathScanner; // if scanner has a non-null diags member, it will feed it scan state information
 
-      EPathError m_error = EPathError::None;
+      EPathError m_error = EPathError::OK;
       std::string m_fullPath;
       std::size_t m_offsTokenScan = 0;
       std::size_t m_offsSelectorScan = 0;

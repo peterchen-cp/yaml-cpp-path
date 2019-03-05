@@ -44,8 +44,8 @@ a `Node`. All symbols are defined in the `YAML` namespace.
 
 **Status:**  
 
-Used in production. currently implements the initially required/envisioned features, some ideas are pending.
-`yaml-path\readme.txt`
+Used in production. currently implements the initially required/envisioned features, some ideas (`yaml-path\readme.txt`) are pending.
+I'm still willing to break syntaxt, esp. the path specification. 
 
 
 ## Getting Started
@@ -103,7 +103,7 @@ this is a list of example paths and the nodes they return:
     - blue
     - red
 
-**Path:** `"[color=red]"`
+**Path:** `"{color=red}"`
 
 	- name: Joe
 	  color: red
@@ -114,13 +114,13 @@ this is a list of example paths and the nodes they return:
 		Wladimir: good
 		Godot: unreliable
 
-**Path:** `"[color=blue]"`
+**Path:** `"{color=blue}"`
 
     - name: Sina
       color: blue
 
 
-**Path:** `"[friends=]"`
+**Path:** `"{friends=}"`
 
 	- name: Joe
 	  color: red

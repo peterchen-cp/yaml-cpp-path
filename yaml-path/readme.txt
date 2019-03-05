@@ -7,12 +7,20 @@ Current shortcomings:
 Ideas:
 
 	in-path functions. 
-		"~ismap", "~isseq", "~isscalar""
+		"!ismap", "!isseq", "!isscalar""
 			select the node only if it is a map (or sequence, or scalar, respectively)
 			if it is of a different type an empty node is selected
 
-		"[~isscalar]" to select only the maps from a sequence  (etc. for other types)
-		"{~isscalar}" to select only the pairs from a map where the value is a scalar (etc. for other types)
+		"[$isscalar]" to select only the maps from a sequence  (etc. for other types)
+		"{$isscalar}" to select only the pairs from a map where the value is a scalar (etc. for other types)
+
+		--OR--
+
+		"!make(seq)"			wraps scalars and maps in a single-element sequence and null/invalid so that iterating through it works
+		"!make(seq, scalar)"	if node is a sequence, selects a sequence of scalars.
+								if node is a scalar, select a one-element sequence of this scalar
+				etc. for other combinations, as useful
+
 	
 		Aggregate functions such as Sum<double>(node) I would do as "real" C++ functions, (e.g. so we can specify the type)
 
