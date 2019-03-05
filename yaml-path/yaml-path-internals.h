@@ -66,6 +66,8 @@ namespace YAML
          Equal,
          Index,         // translated from UnquotedIdentifier in NextSelectorToken
          FetchArg,
+         OpenBrace,
+         CloseBrace,
       };
       /* when adding a new token, also add to:
             - MapETokenName
@@ -97,7 +99,8 @@ namespace YAML
       struct ArgNull {};
       struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
-      struct ArgSeqMapFilter { PathArg key; std::optional<PathArg> value; };
+      struct ArgKVPair { PathArg key; std::optional<PathArg> value; };     // used in some selectors
+      using ArgSeqMapFilter = ArgKVPair; 
 
       /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select
          This class implements two layers of the scan: 
@@ -171,7 +174,7 @@ namespace YAML
          // for access by utility functions to record an error
          EPathError SetError(EPathError error, uint64_t validTypes = 0);
 
-         inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::FetchArg, EToken::None, EToken::OpenBracket, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
+         inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::FetchArg, EToken::None, EToken::OpenBracket, EToken::OpenBrace,  EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
       };
    }
 }

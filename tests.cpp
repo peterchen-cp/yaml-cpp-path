@@ -424,7 +424,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
    
    {  // has 3 nodes with any "name"
       auto node = YAML::Load(sroot);
-      PathArg path = "[name=]"; // all having a name
+      PathArg path = "{name=}"; // all having a name
       CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -448,9 +448,9 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has no node with empty "name"
       auto node = YAML::Load(sroot);
-      PathArg path = "[name='']"; // all having a name
+      PathArg path = "{name=''}"; // all having a name
       CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
-      CHECK(path == "[name='']");
+      CHECK(path == "{name=''}");
       CHECK(node.IsSequence());
       CHECK(node.size() == 3);
       CHECK(node[2]["name"].as<S>() == "Estragon"); // let's call that "sufficient check if this is still the root node"
@@ -458,7 +458,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has two nodes with any "place"
       auto node = YAML::Load(sroot);
-      PathArg path = "[place=]";
+      PathArg path = "{place=}";
       CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -469,7 +469,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has three nodes with any color
       auto node = YAML::Load(sroot);
-      PathArg path = "[color=]";
+      PathArg path = "{color=}";
       CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());
@@ -478,7 +478,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has three nodes with color "blue"
       auto node = YAML::Load(sroot);
-      PathArg path = "[color=blue]";
+      PathArg path = "{color=blue}";
       CHECK(PathResolve(node, path) == EPathError::OK);
       CHECK(path == "");
       CHECK(node.IsSequence());

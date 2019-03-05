@@ -169,6 +169,8 @@ namespace YAML
          { EToken::UnquotedIdentifier, "unquoted identifier" },
          { EToken::Index, "Index" },
          { EToken::FetchArg, "bound argument" },
+         { EToken::OpenBrace, "open brace" },
+         { EToken::CloseBrace, "close brace" },
       };
 
       /// \internal name mapping for yaml-cpp node type
@@ -295,6 +297,8 @@ namespace YAML
             { '.', EToken::Period },
             { '[', EToken::OpenBracket },
             { ']', EToken::CloseBracket },
+            { '{', EToken::OpenBrace },
+            { '}', EToken::CloseBrace },
             { '=', EToken::Equal },
             { '%', EToken::FetchArg },
             }, EToken::None);
@@ -460,19 +464,22 @@ namespace YAML
 
             case EToken::OpenBracket:
             {
-               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier, EToken::Index }), EPathError::InvalidIndex))
+               if (!NextSelectorToken(BitsOf({ EToken::Index }), EPathError::InvalidIndex))
                   return ESelector::Invalid;
 
-               // [1] --> index
-               if (m_curToken.id == EToken::Index)
-               {
-                  const size_t index = m_curToken.index;
-                  if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
-                     return ESelector::Invalid;
+               const size_t index = m_curToken.index;
+               if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+                  return ESelector::Invalid;
 
-                  m_periodAllowed = true;
-                  return SetSelector(ESelector::Index, ArgIndex{ index });
-               }
+               m_periodAllowed = true;
+               return SetSelector(ESelector::Index, ArgIndex{ index });
+            }
+
+
+            case EToken::OpenBrace:
+            {
+               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier })))
+                  return ESelector::Invalid;
 
                // [key=] or [key=value] for filtering
                auto tokKey = m_curToken.value;
@@ -481,12 +488,12 @@ namespace YAML
                   return ESelector::Invalid;
 
                std::optional<PathArg> tokValue = std::nullopt;
-               if (!NextSelectorToken(BitsOf({ EToken::QuotedIdentifier, EToken::UnquotedIdentifier, EToken::CloseBracket })))
+               if (!NextSelectorToken(BitsOf({ EToken::QuotedIdentifier, EToken::UnquotedIdentifier, EToken::CloseBrace })))
                   return ESelector::Invalid;
-               if (m_curToken.id != EToken::CloseBracket)
+               if (m_curToken.id != EToken::CloseBrace)
                {
                   tokValue = m_curToken.value;
-                  if (!NextSelectorToken(BitsOf({ EToken::CloseBracket })))
+                  if (!NextSelectorToken(BitsOf({ EToken::CloseBrace })))
                      return ESelector::Invalid;
                }
 

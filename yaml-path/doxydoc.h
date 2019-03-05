@@ -22,6 +22,8 @@ The most important methods are
    - \ref PathResolve for incremental matching
    - \ref PathValidate for validating a path
 
+   - \ref SelectByKey, \ref SelectByIndex, \ref SelectBySeqMapFilter
+
 
 # Selectors
 
@@ -37,8 +39,8 @@ If \c node is a sequence, it takes all maps from the sequence that contain a key
 
 Example:
 \code
-{ k : letter, 2 : number }  ==>   "letter"
-[ { k : 1, l : 2}, { k : letter, 2 : number}, { l : letter } ]   ==>  [ 1, letter ]
+{ k : letter, 2 : number }  ==&rarr;   "letter"
+[ { k : 1, l : 2}, { k : letter, 2 : number}, { l : letter } ]   ==&rarr;  [ 1, letter ]
 \endcode
 
 ## Index
@@ -50,7 +52,7 @@ If \c node is a scalar or a map, and \c n is 0, selects that scalar or map
 
 ## Seq-Map Filter
 
-<code>Select(node, "[key=value]")</code> or <code>Select(node, "[key=]")</code>
+<code>Select(node, "{key=value}")</code> or <code>Select(node, "{key=}")</code>
 
 Selects maps from a sequence if they contain the specified key-value pair, or the specified key with an arbitrary value.
 
@@ -59,7 +61,7 @@ If \c node is a sequence, selects all maps from the sequence that contain a key 
 
 \c value can be omitted, in which case the same rules apply, except that a map is selected if it contains a key \c "key",
 independent of its value.\n
-To check for an empty key, you can use quotes, e.g. <code>Select(node, "[key='']"</code> (see quoting)
+To check for an empty key, you can use quotes, e.g. <code>Select(node, "{key=''}"</code> (see quoting)
 
 ## Selector Chaining
 
