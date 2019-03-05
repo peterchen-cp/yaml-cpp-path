@@ -46,8 +46,17 @@ namespace YAML
    using PathBoundArg = std::variant<size_t, PathArg>;         ///< bound argument for a YAML path. See \ref Select
    using PathBoundArgs = std::initializer_list<PathBoundArg>;  ///< list of bound arguments, see \ref Select
 
+   struct KVToken { PathArg token; bool required = false; bool noCase = false; bool starry = false; };
+   enum class EKVOp
+   {
+      Equal,
+      NotEqual,
+      Exists,
+      Select,
+   };
+
    EPathError SelectByKey(Node & node, PathArg key);
-   EPathError SelectBySeqMapFilter(Node & node, PathArg key, std::optional<PathArg> value);
+   EPathError SelectBySeqMapFilter(Node & node, KVToken const & key, KVToken const & value, EKVOp op);
    EPathError SelectByIndex(Node & node, size_t index);
 
    Node Select(Node node, PathArg path, PathBoundArgs args = {}); ///< Select a node

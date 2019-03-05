@@ -99,7 +99,16 @@ namespace YAML
       struct ArgNull {};
       struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
-      struct ArgKVPair { PathArg key; std::optional<PathArg> value; };     // used in some selectors
+
+      struct ArgKVPair 
+      { 
+         KVToken key; 
+         KVToken value; 
+         EKVOp op = EKVOp::Equal;  
+
+         // CTor for current implementation
+         ArgKVPair(PathArg key_, std::optional<PathArg> value_);
+      };
       using ArgSeqMapFilter = ArgKVPair; 
 
       /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select

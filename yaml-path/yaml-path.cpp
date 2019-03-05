@@ -63,7 +63,7 @@ namespace YAML
    namespace YamlPathDetail
    {
       // checks if a YAML map matches the requirements of a seq-map filter
-      bool SeqMapFilterMatchElement(Node const & element, std::string key, std::optional<PathArg> value)
+      bool SeqMapFilterMatchElement(Node const & element, std::string key, std::string_view value, EKVOp op)
       {
          // performance optimization: if key lookup can be done with string_view, pass key as PathArg
 
@@ -74,24 +74,30 @@ namespace YAML
          if (!v)
             return false;
 
-         return !value ||    // if no required value is given, any value accepted as long as key exists
-            (v.IsScalar() && v.as<std::string>() == *value);
+         return op == EKVOp::Exists ||    // if no required value is given, any value accepted as long as key exists
+            (v.IsScalar() && v.as<std::string>() == value);
       }
    }
 
-   EPathError SelectBySeqMapFilter(Node & node, PathArg key, std::optional<PathArg> value)
+   EPathError SelectBySeqMapFilter(Node & node, KVToken const & key, KVToken const & value, EKVOp op)
    {
       Node newNode;
+
+      if (key.noCase || key.required || key.starry ||
+          value.noCase || value.required || value.starry ||
+          op == EKVOp::Select || op == EKVOp::NotEqual)
+         return EPathError::Internal;     // not yet implemented
+
       if (node.IsSequence())
       {
-         std::string key_(key);
+         std::string key_(key.token);
          for (auto && el : node)
-            if (YamlPathDetail::SeqMapFilterMatchElement(el, key_, value))
+            if (YamlPathDetail::SeqMapFilterMatchElement(el, key_, value.token, op))
                newNode.push_back(el);
       }
       else if (node.IsMap())
       {
-         if (YamlPathDetail::SeqMapFilterMatchElement(node, std::string(key), value))
+         if (YamlPathDetail::SeqMapFilterMatchElement(node, std::string(key.token), value.token, op))
             newNode = node;
       }
       else
@@ -126,6 +132,18 @@ namespace YAML
 
    namespace YamlPathDetail
    {
+      ArgKVPair::ArgKVPair(PathArg key_, std::optional<PathArg> value_)
+      {
+         key.token = key_;
+         if (value_)
+         {
+            value.token = *value_;
+            op = EKVOp::Equal;
+         }
+         else
+            op = EKVOp::Exists;
+      }
+
       /// \internal helper to map enum values to names, used for diagnostics
       template <typename T2, typename TEnum>
       T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2())
@@ -498,7 +516,7 @@ namespace YAML
                }
 
                m_periodAllowed = true;
-               return SetSelector(ESelector::SeqMapFilter, ArgSeqMapFilter{tokKey, tokValue});
+               return SetSelector(ESelector::SeqMapFilter, ArgSeqMapFilter{ { tokKey }, {tokValue }  });
             }
          }
          return ESelector::Invalid;
@@ -642,7 +660,7 @@ namespace YAML
             case ESelector::SeqMapFilter:
             {
                auto && arg = scan.SelectorData<ArgSeqMapFilter>();
-               if (auto err = SelectBySeqMapFilter(node, arg.key, arg.value); err != EPathError::OK)
+               if (auto err = SelectBySeqMapFilter(node, arg.key, arg.value, arg.op); err != EPathError::OK)
                   return scan.SetError(err);
                continue;
             }
