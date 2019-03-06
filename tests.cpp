@@ -13,12 +13,22 @@ using namespace YAML;
 
 namespace YAML
 {
-   doctest::String toString(EPathError value) { return (std::stringstream() << (int)value).str().c_str(); }
+   template <typename TEnum>
+   doctest::String DT2String(TEnum value, std::initializer_list<std::pair<TEnum, char const *>> map)
+   {
+      char const * p = YamlPathDetail::MapValue(value, map);
+      if (p)
+         return p;
+
+      return (std::stringstream() << "(" << (int)value << ")").str().c_str(); 
+   }
+
+   doctest::String toString(EPathError value) { return DT2String(value, YamlPathDetail::MapEPathErrorName); }
 
    namespace YamlPathDetail
    {
-      doctest::String toString(EToken value) { return (std::stringstream() << (int)value).str().c_str(); }
-      doctest::String toString(ESelector value) { return (std::stringstream() << (int)value).str().c_str(); }
+      doctest::String toString(EToken value) { return DT2String(value, MapETokenName); }
+      doctest::String toString(ESelector value) { return DT2String(value, MapESelectorName); }
    }
 }
 
@@ -140,7 +150,7 @@ TEST_CASE("Internal: TokenScanner")
 {
    using namespace YamlPathDetail;
    {
-      PathArg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
+      PathArg scanMe = "a.beta.'a b[c]'.\"a.b\".[].#.abc";
       PathScanner scan(scanMe);
       CHECK(scan);
       CHECK(scan.NextToken().id == EToken::UnquotedIdentifier); 
@@ -406,7 +416,7 @@ TEST_CASE("PathResolve - SeqMap")
 }
 
 
-TEST_CASE("PathResolve - SeqMapFilter")
+TEST_CASE("PathResolve - MapFilter (adapted from initial syntax)")
 {
    char const * sroot =
       R"(
@@ -448,7 +458,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has no node with empty "name"
       auto node = YAML::Load(sroot);
-      PathArg path = "{name=''}"; // all having a name
+      PathArg path = "{name=''}"; 
       CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
       CHECK(path == "{name=''}");
       CHECK(node.IsSequence());

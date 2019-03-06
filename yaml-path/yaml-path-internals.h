@@ -68,6 +68,11 @@ namespace YAML
          FetchArg,
          OpenBrace,
          CloseBrace,
+         Exclamation,
+         Caret,
+         Asterisk,
+         Tilde, 
+         Comma,
       };
       /* when adding a new token, also add to:
             - MapETokenName
@@ -92,17 +97,15 @@ namespace YAML
          None = 0,
          Key,
          Index,
-         SeqMapFilter,
-         KeyList,
+         MapFilter,
       };
 
       // Data for different selector types
       struct ArgNull {};
       struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
-      struct ArgKVPair { PathArg key; std::optional<PathArg> value; };     // used in some selectors
-      using ArgSeqMapFilter = ArgKVPair; 
-      using ArgKeyList = std::vector<ArgKVPair>;
+      struct ArgKVPair { KVToken key; KVToken value; EKVOp op = EKVOp::Equal; };
+      using ArgMapFilter = std::vector<ArgKVPair>;
 
       /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select
          This class implements two layers of the scan: 
@@ -120,7 +123,7 @@ namespace YAML
       class PathScanner
       {
       public:
-         using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;  ///< union of the selector data for all selector types
+         using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgMapFilter>;  ///< union of the selector data for all selector types
 
       private:
          PathArg    m_rpath;        // remainder of path to be scanned
@@ -151,6 +154,8 @@ namespace YAML
 
          void SkipWS();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
+         bool PeekSelectorToken(uint64_t validTokens);
+         bool ReadKVToken(KVToken & result, uint64_t endTokens);
 
       public:
          PathScanner(PathArg p, PathBoundArgs args = {}, PathException * diags = nullptr);
@@ -178,6 +183,14 @@ namespace YAML
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::FetchArg, EToken::None, EToken::OpenBracket, EToken::OpenBrace,  EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
       };
+
+      template <typename T2, typename TEnum>
+      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2());
+
+      extern std::initializer_list<std::pair<EToken, char const *>> MapETokenName;
+      extern std::initializer_list<std::pair<NodeType::value, char const *>> MapNodeTypeName;
+      extern std::initializer_list<std::pair<ESelector, char const *>> MapESelectorName;
+      extern std::initializer_list<std::pair<EPathError, char const *>> MapEPathErrorName;
    }
 }
 
@@ -210,6 +223,17 @@ namespace YAML
       {
          return ((TBits(1) << TBits(v)) & bits) != 0;
       }
+
+      /// \internal helper to map enum values to names, used for diagnostics
+      template <typename T2, typename TEnum>
+      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt)
+      {
+         for (auto && p : values)
+            if (p.first == value)
+               return p.second;
+         return dflt;
+      }
+
 
    }
 }
