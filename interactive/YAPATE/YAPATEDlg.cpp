@@ -86,6 +86,10 @@ BOOL CYAPATEDlg::OnInitDialog()
    m_ddPath.AddString(_T("[1]"));
    m_ddPath.AddString(_T("[1].name"));
    m_ddPath.AddString(_T("[1].wealth"));
+   m_ddPath.AddString(_T("{name,color}"));
+   m_ddPath.AddString(_T("{color=red}"));
+   m_ddPath.AddString(_T("{color=red,name}"));
+   m_ddPath.AddString(_T("{^Color=^BLUE,name}"));
 
    UpdateOutput();
 	return TRUE;
