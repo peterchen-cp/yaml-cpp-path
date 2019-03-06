@@ -144,16 +144,6 @@ namespace YAML
             op = EKVOp::Exists;
       }
 
-      /// \internal helper to map enum values to names, used for diagnostics
-      template <typename T2, typename TEnum>
-      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2())
-      {
-         for (auto && p : values)
-            if (p.first == value)
-               return p.second;
-         return dflt;
-      }
-
       /// \internal uses the same mapping as \ref MapValue to create diagnostic for a bit mask (e.g. created by \ref BitsOf)
       template <typename T2, typename TBit, typename TMask>
       std::string MapBitMask(TMask value, std::initializer_list<std::pair<TBit, T2>> values, T2 sep = ", ")

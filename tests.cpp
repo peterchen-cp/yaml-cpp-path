@@ -13,12 +13,22 @@ using namespace YAML;
 
 namespace YAML
 {
-   doctest::String toString(EPathError value) { return (std::stringstream() << (int)value).str().c_str(); }
+   template <typename TEnum>
+   doctest::String DT2String(TEnum value, std::initializer_list<std::pair<TEnum, char const *>> map)
+   {
+      char const * p = YamlPathDetail::MapValue(value, map);
+      if (p)
+         return p;
+
+      return (std::stringstream() << "(" << (int)value << ")").str().c_str(); 
+   }
+
+   doctest::String toString(EPathError value) { return DT2String(value, YamlPathDetail::MapEPathErrorName); }
 
    namespace YamlPathDetail
    {
-      doctest::String toString(EToken value) { return (std::stringstream() << (int)value).str().c_str(); }
-      doctest::String toString(ESelector value) { return (std::stringstream() << (int)value).str().c_str(); }
+      doctest::String toString(EToken value) { return DT2String(value, MapETokenName); }
+      doctest::String toString(ESelector value) { return DT2String(value, MapESelectorName); }
    }
 }
 

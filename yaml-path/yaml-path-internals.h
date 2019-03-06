@@ -185,6 +185,14 @@ namespace YAML
 
          inline static const uint64_t ValidTokensAtStart = BitsOf({ EToken::FetchArg, EToken::None, EToken::OpenBracket, EToken::OpenBrace,  EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
       };
+
+      template <typename T2, typename TEnum>
+      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt = T2());
+
+      extern std::initializer_list<std::pair<EToken, char const *>> MapETokenName;
+      extern std::initializer_list<std::pair<NodeType::value, char const *>> MapNodeTypeName;
+      extern std::initializer_list<std::pair<ESelector, char const *>> MapESelectorName;
+      extern std::initializer_list<std::pair<EPathError, char const *>> MapEPathErrorName;
    }
 }
 
@@ -217,6 +225,17 @@ namespace YAML
       {
          return ((TBits(1) << TBits(v)) & bits) != 0;
       }
+
+      /// \internal helper to map enum values to names, used for diagnostics
+      template <typename T2, typename TEnum>
+      T2 MapValue(TEnum value, std::initializer_list<std::pair<TEnum, T2>> values, T2 dflt)
+      {
+         for (auto && p : values)
+            if (p.first == value)
+               return p.second;
+         return dflt;
+      }
+
 
    }
 }
