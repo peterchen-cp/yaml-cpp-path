@@ -150,7 +150,7 @@ TEST_CASE("Internal: TokenScanner")
 {
    using namespace YamlPathDetail;
    {
-      PathArg scanMe = "a.beta.'a b[c]'.\"a.b\".[].~.abc";
+      PathArg scanMe = "a.beta.'a b[c]'.\"a.b\".[].#.abc";
       PathScanner scan(scanMe);
       CHECK(scan);
       CHECK(scan.NextToken().id == EToken::UnquotedIdentifier); 
@@ -416,7 +416,7 @@ TEST_CASE("PathResolve - SeqMap")
 }
 
 
-TEST_CASE("PathResolve - SeqMapFilter")
+TEST_CASE("PathResolve - MapFilter (adapted from initial syntax)")
 {
    char const * sroot =
       R"(
@@ -458,7 +458,7 @@ TEST_CASE("PathResolve - SeqMapFilter")
 
    {  // has no node with empty "name"
       auto node = YAML::Load(sroot);
-      PathArg path = "{name=''}"; // all having a name
+      PathArg path = "{name=''}"; 
       CHECK(PathResolve(node, path) == EPathError::NodeNotFound);
       CHECK(path == "{name=''}");
       CHECK(node.IsSequence());

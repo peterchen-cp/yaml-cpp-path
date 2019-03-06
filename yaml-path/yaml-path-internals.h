@@ -68,6 +68,11 @@ namespace YAML
          FetchArg,
          OpenBrace,
          CloseBrace,
+         Exclamation,
+         Caret,
+         Asterisk,
+         Tilde, 
+         Comma,
       };
       /* when adding a new token, also add to:
             - MapETokenName
@@ -92,24 +97,15 @@ namespace YAML
          None = 0,
          Key,
          Index,
-         SeqMapFilter,
+         MapFilter,
       };
 
       // Data for different selector types
       struct ArgNull {};
       struct ArgKey { PathArg key; };
       struct ArgIndex { size_t index; };
-
-      struct ArgKVPair 
-      { 
-         KVToken key; 
-         KVToken value; 
-         EKVOp op = EKVOp::Equal;  
-
-         // CTor for current implementation
-         ArgKVPair(PathArg key_, std::optional<PathArg> value_);
-      };
-      using ArgSeqMapFilter = ArgKVPair; 
+      struct ArgKVPair { KVToken key; KVToken value; EKVOp op = EKVOp::Equal; };
+      using ArgMapFilter = std::vector<ArgKVPair>;
 
       /** \internal progressive scanner/parser for a YAML path as specified by YAML::Select
          This class implements two layers of the scan: 
@@ -127,7 +123,7 @@ namespace YAML
       class PathScanner
       {
       public:
-         using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgSeqMapFilter>;  ///< union of the selector data for all selector types
+         using tSelectorData = std::variant<ArgNull, ArgKey, ArgIndex, ArgMapFilter>;  ///< union of the selector data for all selector types
 
       private:
          PathArg    m_rpath;        // remainder of path to be scanned
@@ -158,6 +154,8 @@ namespace YAML
 
          void SkipWS();
          bool NextSelectorToken(uint64_t validTokens, EPathError error = EPathError::InvalidToken);
+         bool PeekSelectorToken(uint64_t validTokens);
+         bool ReadKVToken(KVToken & result, uint64_t endTokens);
 
       public:
          PathScanner(PathArg p, PathBoundArgs args = {}, PathException * diags = nullptr);

@@ -60,56 +60,6 @@ namespace YAML
       return EPathError::InvalidNodeType;
    }
 
-   namespace YamlPathDetail
-   {
-      // checks if a YAML map matches the requirements of a seq-map filter
-      bool SeqMapFilterMatchElement(Node const & element, std::string key, std::string_view value, EKVOp op)
-      {
-         // performance optimization: if key lookup can be done with string_view, pass key as PathArg
-
-         if (!element.IsMap())
-            return false;
-
-         auto v = element[key];
-         if (!v)
-            return false;
-
-         return op == EKVOp::Exists ||    // if no required value is given, any value accepted as long as key exists
-            (v.IsScalar() && v.as<std::string>() == value);
-      }
-   }
-
-   EPathError SelectBySeqMapFilter(Node & node, KVToken const & key, KVToken const & value, EKVOp op)
-   {
-      Node newNode;
-
-      if (key.noCase || key.required || key.starry ||
-          value.noCase || value.required || value.starry ||
-          op == EKVOp::Select || op == EKVOp::NotEqual)
-         return EPathError::Internal;     // not yet implemented
-
-      if (node.IsSequence())
-      {
-         std::string key_(key.token);
-         for (auto && el : node)
-            if (YamlPathDetail::SeqMapFilterMatchElement(el, key_, value.token, op))
-               newNode.push_back(el);
-      }
-      else if (node.IsMap())
-      {
-         if (YamlPathDetail::SeqMapFilterMatchElement(node, std::string(key.token), value.token, op))
-            newNode = node;
-      }
-      else
-         return EPathError::InvalidNodeType;
-
-      if (newNode.IsNull())
-         return EPathError::NodeNotFound;
-
-      node.reset(newNode);
-      return EPathError::OK;
-   }
-
    EPathError SelectByIndex(Node & node, size_t index)
    {
       if (node.IsScalar() || node.IsMap())
@@ -132,18 +82,6 @@ namespace YAML
 
    namespace YamlPathDetail
    {
-      ArgKVPair::ArgKVPair(PathArg key_, std::optional<PathArg> value_)
-      {
-         key.token = key_;
-         if (value_)
-         {
-            value.token = *value_;
-            op = EKVOp::Equal;
-         }
-         else
-            op = EKVOp::Exists;
-      }
-
       /// \internal uses the same mapping as \ref MapValue to create diagnostic for a bit mask (e.g. created by \ref BitsOf)
       template <typename T2, typename TBit, typename TMask>
       std::string MapBitMask(TMask value, std::initializer_list<std::pair<TBit, T2>> values, T2 sep = ", ")
@@ -179,6 +117,11 @@ namespace YAML
          { EToken::FetchArg, "bound argument" },
          { EToken::OpenBrace, "open brace" },
          { EToken::CloseBrace, "close brace" },
+         { EToken::Exclamation, "exclamation mark" },
+         { EToken::Caret, "caret" },
+         { EToken::Asterisk, "asterisk" },
+         { EToken::Tilde, "tilde" },
+         { EToken::Comma, "comma" },
       };
 
       /// \internal name mapping for yaml-cpp node type
@@ -196,7 +139,7 @@ namespace YAML
       {
          { ESelector::Index,  "index" },
          { ESelector::Key,    "key" },
-         { ESelector::SeqMapFilter, "seq-map filter" },
+         { ESelector::MapFilter, "map filter" },
          { ESelector::None, "(none)" },
          { ESelector::Invalid, "(invalid)" },
       };
@@ -309,6 +252,11 @@ namespace YAML
             { '}', EToken::CloseBrace },
             { '=', EToken::Equal },
             { '%', EToken::FetchArg },
+            { '!', EToken::Exclamation },
+            { '^', EToken::Caret },
+            { '*', EToken::Asterisk },
+            { '~', EToken::Tilde },
+            { ',', EToken::Comma },
             }, EToken::None);
 
          if (t != EToken::None)
@@ -377,6 +325,23 @@ namespace YAML
          return EAsIndex::OK;
       }
 
+      /** Supports pending token, but neither fetches args nor translates to index. 
+          if the token is not the expected one, it's unread and false is returned. Otherwise, it's read and true is returned.
+      */
+      bool PathScanner::PeekSelectorToken(uint64_t validTokens)
+      {
+         if (m_tokenPending)
+            m_tokenPending = false;    // re-use previous token once after pushing it back
+         else
+            NextToken();
+
+         if (BitsContain(validTokens, m_curToken.id))
+            return true;
+
+         m_tokenPending = true;
+         return false;
+      }
+
       /** \internal Used by the selector scanner to retrieve and process the next token
          In addition to \c NextToken, this
 
@@ -390,6 +355,8 @@ namespace YAML
             m_tokenPending = false;    // re-use previous token once after pushing it back
          else
             NextToken();
+
+         /// \todo bug: tokenPending can not push back FetchArg
 
          // Fetch argument from argument list if required
          if (m_curToken.id == EToken::FetchArg)
@@ -425,6 +392,52 @@ namespace YAML
             error = EPathError::UnexpectedEnd;
          SetError(error, validTokens);
          return false;
+      }
+
+      bool PathScanner::ReadKVToken(KVToken & kvtoken, uint64_t endTokens)
+      {
+         kvtoken = KVToken();
+
+         const auto nameTokens = BitsOf({ EToken::FetchArg, EToken::QuotedIdentifier, EToken::UnquotedIdentifier });
+         auto validTokens = BitsOf({ EToken::Exclamation, EToken::Caret, EToken::Asterisk }) | nameTokens;
+         while (true)
+         {
+            if (!NextSelectorToken(validTokens))
+               return false;
+
+            switch (m_curToken.id)
+            {
+               case EToken::Exclamation:
+                  validTokens &= ~BitsOf({ EToken::Exclamation });
+                  kvtoken.required = true;
+                  continue;
+
+               case EToken::Caret:
+                  validTokens &= ~BitsOf({ EToken::Caret });
+                  kvtoken.noCase = true;
+                  continue;
+
+               case EToken::QuotedIdentifier:
+               case EToken::UnquotedIdentifier:
+               case EToken::FetchArg:
+                  validTokens &= ~(nameTokens | BitsOf({ EToken::Caret, EToken::Exclamation }));
+                  validTokens |= endTokens;
+                  kvtoken.token = m_curToken.value;
+                  continue;
+
+               case EToken::Asterisk:
+                  validTokens = endTokens;
+                  kvtoken.starry = true;
+                  continue;
+
+               default:
+                  m_tokenPending = true; // stuff it back
+                  if (BitsContain(endTokens, m_curToken.id))
+                     return true;
+
+                  return false;
+            }
+         }
       }
 
       /** retrieves the next selector. */
@@ -486,27 +499,72 @@ namespace YAML
 
             case EToken::OpenBrace:
             {
-               if (!NextSelectorToken(BitsOf({ EToken::UnquotedIdentifier, EToken::QuotedIdentifier })))
-                  return ESelector::Invalid;
-
-               // [key=] or [key=value] for filtering
-               auto tokKey = m_curToken.value;
-
-               if (!NextSelectorToken(BitsOf({ EToken::Equal })))
-                  return ESelector::Invalid;
-
-               std::optional<PathArg> tokValue = std::nullopt;
-               if (!NextSelectorToken(BitsOf({ EToken::QuotedIdentifier, EToken::UnquotedIdentifier, EToken::CloseBrace })))
-                  return ESelector::Invalid;
-               if (m_curToken.id != EToken::CloseBrace)
+               ArgMapFilter arg; /// \todo optimization: a std::vector replacement with a small buffer optimization of length 1 would be pretty useful here
+               while (true)
                {
-                  tokValue = m_curToken.value;
-                  if (!NextSelectorToken(BitsOf({ EToken::CloseBrace })))
+                  ArgKVPair kvp;
+                  if (!ReadKVToken(kvp.key, BitsOf({ EToken::Tilde, EToken::Equal, EToken::Comma, EToken::CloseBrace })))
                      return ESelector::Invalid;
+
+                  if (!NextSelectorToken(BitsOf({ EToken::Tilde, EToken::Equal, EToken::Comma, EToken::CloseBrace})))
+                     return ESelector::Invalid;
+
+
+                  bool atEnd = false;
+                  switch (m_curToken.id)
+                  {
+                     case EToken::Tilde:
+                        if (!NextSelectorToken(BitsOf({ EToken::Equal })))
+                           return ESelector::Invalid;
+                        kvp.op = EKVOp::NotEqual;
+                        break;
+
+                     case EToken::Equal:
+                        kvp.op = EKVOp::Equal;
+                        break;
+
+                     case EToken::Comma:
+                        kvp.op = EKVOp::Select;
+                        arg.push_back(kvp);
+                        continue;
+
+                     case EToken::CloseBrace:
+                        kvp.op = EKVOp::Select;
+                        arg.push_back(kvp);
+                        atEnd = true;
+                        break;
+                  }
+                  if (atEnd)
+                     break;
+
+                  if (PeekSelectorToken(BitsOf({ EToken::CloseBrace, EToken::Comma })))
+                  {
+                     m_tokenPending = true;
+                     if (kvp.op == EKVOp::Equal) kvp.op = EKVOp::Exists;
+                     else if (kvp.op == EKVOp::NotEqual)
+                        return SetError(EPathError::InvalidToken), ESelector::Invalid;    // not equal must have value
+                     else 
+                        return SetError(EPathError::Internal), ESelector::Invalid;
+                  }
+                  else
+                     if (!ReadKVToken(kvp.value, BitsOf({ EToken::Comma, EToken::CloseBrace })))
+                        return ESelector::Invalid;
+
+                  if (!NextSelectorToken(BitsOf({ EToken::Comma, EToken::CloseBrace })))
+                     return ESelector::Invalid;
+
+                  arg.push_back(kvp);
+                  if (m_curToken.id == EToken::Comma)
+                     continue;
+
+                  break;
                }
 
+               // partition: move conditions to front, selectors to the back. Allows arbitrary ordering
+               std::partition(arg.begin(), arg.end(), [](ArgKVPair const & kvp) { return kvp.op != EKVOp::Select;  });
+
                m_periodAllowed = true;
-               return SetSelector(ESelector::SeqMapFilter, ArgSeqMapFilter{ { tokKey }, {tokValue }  });
+               return SetSelector(ESelector::MapFilter, std::move(arg));
             }
          }
          return ESelector::Invalid;
@@ -598,6 +656,138 @@ namespace YAML
       return scan.Error(); 
    }
 
+
+   namespace YamlPathDetail
+   {
+      bool StrIsMatch(KVToken const & tok, Node const & node)
+      {
+         if (!node.IsScalar())
+            return false;
+
+         if (tok.IsAllStar())
+            return true;
+
+         std::string snode = node.as<std::string>();
+
+         // length checks that allow to skip comparisons
+         // Unicode: the length checks would be applicable only on case sensitive comparison after normalization. 
+         if (!tok.starry && snode.length() != tok.token.length())    // non-starry equality requires identical length
+            return false;
+
+         if (tok.starry && snode.length() < tok.token.length())      // "cccc*" cannot match "cccc", whatever the c's are
+            return false;
+         // --
+
+         // Unicode: some assumptions here don't hold. It's strcoll, stricoll, and I'm not sure how to implement no-case starry matches
+         size_t cmpLen = std::min(tok.token.length(), snode.length());
+         int result = tok.noCase ? _strnicmp(&tok.token[0], snode.c_str(), cmpLen) : strncmp(&tok.token[0], snode.c_str(), cmpLen);
+
+         return result == 0; // under assumption of above length-based shortcuts
+      }
+
+      bool KeyIsMatch(ArgKVPair const & arg, Node const & key)
+      {
+         return StrIsMatch(arg.key, key);
+      }
+
+      bool ValueIsMatch(ArgKVPair const & arg, Node const & value)
+      {
+         if (arg.op == EKVOp::Exists)
+            return true;      // any value, including non-scalars and null, is a match
+
+         bool eq = StrIsMatch(arg.value, value);
+         if (arg.op == EKVOp::Equal)
+            return eq;
+
+         if (arg.op == EKVOp::NotEqual)
+            return !eq;
+
+         assert(false); // unknown / unsupported op
+         return false;
+      }
+
+      EPathError ApplyMapFilterToMap(Node & node, ArgMapFilter const & arg)
+      {
+         ArgMapFilter::const_iterator argit = arg.begin();
+
+         // --- for each condition (they are in the beginning of the list):
+         bool anyMatch = false;
+         for (; argit != arg.end() && argit->op != EKVOp::Select; ++argit) // selects are already sorted to the end of the list
+         {
+            KVToken const & key = argit->key;
+            const bool scanKeys = key.starry || key.noCase; // cannot use the index operator, need to check keys one-by-one
+
+            if (scanKeys)
+            {
+               for (auto keyit = node.begin(); keyit != node.end(); ++keyit)
+               {
+                  if (!KeyIsMatch(*argit, keyit->first))
+                     continue;
+
+                  if (ValueIsMatch(*argit, keyit->second))
+                  {
+                     anyMatch = true;
+                     break; // don't scan further keys if we have a match in this map already
+                  }
+               }
+            }
+            else
+            {
+               Node el = node[std::string(key.token)];
+               if (!el && key.required)
+                  return EPathError::NodeNotFound;    // required key was not present
+
+               if (el && ValueIsMatch(*argit, el))
+                  anyMatch = true;
+               // still have to test further conditions, since there may be other required keys
+            }
+
+            if (key.required && !anyMatch)
+               return EPathError::NodeNotFound;     // required key was not present
+         } // scan all conditions
+
+         if (!anyMatch && argit != arg.begin())  // no match, but there were some conditions
+            return EPathError::NodeNotFound;
+
+         // --- select specified keys
+
+         if (argit == arg.end())    // no selector follows the conditions - entire node is selected
+            return EPathError::OK;
+
+         Node result;
+         for (; argit != arg.end(); ++argit)
+         {
+            assert(argit->op == EKVOp::Select);
+            KVToken const & key = argit->key;
+
+            if (key.IsAllStar())      // entire node is selected
+               return EPathError::OK;
+
+            const bool scanKeys = key.starry || key.noCase;
+
+            if (scanKeys)
+            {
+               for (auto keyit = node.begin(); keyit != node.end(); ++keyit)
+               {
+                  if (KeyIsMatch(*argit, keyit->first))
+                     result[keyit->first] = keyit->second;
+               }
+            }
+            else
+            {
+               auto value = node[std::string(key.token)];
+               if (value)
+                  result[std::string(key.token)] = value;
+            }
+         }
+         if (!result.IsMap())
+            return EPathError::NodeNotFound;
+
+         node.reset(result);
+         return EPathError::OK;
+      }
+   }
+
    
    /** Match a YAML path as far as possible
 
@@ -647,12 +837,36 @@ namespace YAML
                continue;
             }
 
-            case ESelector::SeqMapFilter:
+            case ESelector::MapFilter:
             {
-               auto && arg = scan.SelectorData<ArgSeqMapFilter>();
-               if (auto err = SelectBySeqMapFilter(node, arg.key, arg.value, arg.op); err != EPathError::OK)
-                  return scan.SetError(err);
-               continue;
+               auto && arg = scan.SelectorData<ArgMapFilter>();
+               EPathError err = EPathError::OK;
+               if (node.IsMap())
+               {
+                  if (auto err = ApplyMapFilterToMap(node, arg); err != EPathError::OK)
+                     return scan.SetError(err);
+                  continue;
+               }
+
+               if (node.IsSequence())
+               {
+                  Node result;
+                  for (auto && el : node)
+                  {
+                     if (!el.IsMap())
+                        continue;
+                     auto err = ApplyMapFilterToMap(el, arg);
+                     if (err != EPathError::OK)
+                        continue;
+                     result.push_back(el);
+                  }
+                  if (!result.IsSequence())    // node didn't become a sequence if nothing did match
+                     return scan.SetError(EPathError::NodeNotFound);
+                  node.reset(result);
+                  continue;
+               }
+
+               return scan.SetError(EPathError::InvalidNodeType);
             }
 
             case ESelector::Invalid:
