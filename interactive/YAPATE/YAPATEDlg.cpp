@@ -53,6 +53,7 @@ enum EMethod
    emRequire,
    emPathResolve,
    emPathValidate,
+   emEnsure,
 };
 
 BOOL CYAPATEDlg::OnInitDialog()
@@ -71,6 +72,7 @@ BOOL CYAPATEDlg::OnInitDialog()
    m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Require")), emRequire);
    m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::PathResolve")), emPathResolve);
    m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::PathValidate")), emPathValidate);
+   m_ddMethod.SetItemData(m_ddMethod.AddString(_T("YAML::Ensure")), emEnsure);
    m_ddMethod.SetCurSel(0);
 
 
@@ -264,6 +266,7 @@ void CYAPATEDlg::UpdateOutput()
       else if (method == emPathValidate)
       {
          QueryPerformanceCounter(&qpcStart);
+         YAML::Node ynode = m_yfile;
          std::string valid;
          size_t errOffs = 0;
          auto err = YAML::PathValidate(path, &valid, &errOffs);
@@ -273,6 +276,35 @@ void CYAPATEDlg::UpdateOutput()
          else
             strResult.Format(_T("Invalid path: %s\r\n  valid part: %s\r\n  error offset: %d\r\n"), 
                FromUtf8(YAML::PathException::GetErrorMessage(err).c_str()), FromUtf8(std::string(valid).c_str()), errOffs);
+      }
+      else if (method == emEnsure)
+      {
+         auto root = YAML::Clone(m_yfile);      // will be modified
+         QueryPerformanceCounter(&qpcStart);
+         auto leaves = YAML::Ensure(root, path);
+         QueryPerformanceCounter(&qpcEnd);
+
+         if (leaves.IsSequence())
+         {
+            for (size_t i=0; i<leaves.size(); ++i)
+               if (leaves[i].IsNull())
+               {
+                  CString s;
+                  s.Format(_T("<-- I made this! #%d"), i);
+                  leaves[i] = YAML::Node(std::string(Utf8(s)));
+               }
+         }
+         else if (leaves.IsNull() || !leaves)
+         {
+            leaves = YAML::Node("<-- I made this!");
+         }
+
+
+
+         strResult = _T("ENSURE: OK\r\nReturned node:\r\n---\r\n");
+         strResult += ToString(leaves);
+         strResult += _T("\r\n---\r\nModified root:\r\n---\r\n");
+         strResult += ToString(root);
       }
    }
    catch (std::exception const & e)
