@@ -932,21 +932,23 @@ namespace YAML
          return start[key];
       }
 
-
-      EPathError EnsureNodeApplyKey(Node & result, Node & start, std::string key, int recurseSeq = 2)
+      void EnsureNodeApplyKey(std::vector<Node> & result, Node & start, std::string key, bool recurse)
       {
          if (!start || start.IsNull() || start.IsMap())
             result.push_back(EnsureNodeApplyKeyToMapOrNothing(start, key));
-         else if (start.IsSequence() && recurseSeq)
+         else if (start.IsSequence() && recurse)
          {
             for (auto & el : start)
                if (el.IsNull() || el.IsMap())
-                  EnsureNodeApplyKey(result, el, key, recurseSeq-1);
+                  EnsureNodeApplyKey(result, el, key, false);
          }
-         else
-            return EPathError::InvalidNodeType;
+      }
 
-         return EPathError::OK;
+      void EnsureNodeApplyKey(std::vector<Node> & result, std::vector<Node> & start, std::string key)
+      {
+         for (auto & el : start)
+            if (el.IsNull() || el.IsMap())
+               EnsureNodeApplyKey(result, el, key, true);
       }
    }
 
@@ -962,7 +964,7 @@ namespace YAML
       PathException x;
       PathScanner scan(path, args, &x);
 
-      Node next;
+      std::vector<Node> next;
       next.push_back(node);
 
       while (scan)
@@ -975,27 +977,22 @@ namespace YAML
             case YamlPathDetail::ESelector::Key:
             {
                std::string key = std::string(scan.SelectorData<ArgKey>().key);
-               Node result;
-               auto err = EnsureNodeApplyKey(result, next, key);
-               if (err != EPathError::OK)
+               std::vector<Node> result;
+               EnsureNodeApplyKey(result, next, key);
+
+               if (!result.size()) // nothing was added
                {
-                  scan.SetError(err);
-                  throw x;     // TODO: allow non-throwing call?
-               }
-               if (!result.IsSequence()) // nothing was added
-               {
-                  assert(false);
-                  scan.SetError(EPathError::Internal);
+                  scan.SetError(EPathError::Internal);  // TODO: appropriate error msg
                   throw x;
                }
-               next.reset(result);
+               next.swap(result);
                continue;
             }
 
             case YamlPathDetail::ESelector::MapFilter:
             {
                bool haveAssignment = false;
-               Node result;
+               std::vector<Node> result;
                for (auto && kvp : scan.SelectorData<ArgMapFilter>())
                {
                   if (kvp.op == EKVOp::NotEqual ||
@@ -1006,18 +1003,18 @@ namespace YAML
                      throw x;
                   }
                   if (kvp.op == EKVOp::Select)
-                     YamlPathDetail::EnsureNodeApplyKey(result, next, std::string(kvp.key.token));
+                     EnsureNodeApplyKey(result, next, std::string(kvp.key.token));
                   else // has assignment
                   {
-                     Node assignTo;
-                     YamlPathDetail::EnsureNodeApplyKey(assignTo, next, std::string(kvp.key.token));
-                     haveAssignment = assignTo.IsSequence();
+                     std::vector<Node> assignTo;
+                     EnsureNodeApplyKey(assignTo, next, std::string(kvp.key.token));
+                     haveAssignment = !assignTo.empty();
                      for (size_t idx = 0; idx < assignTo.size(); ++idx)
                         if (kvp.op != EKVOp::Exists && (!assignTo[idx] || assignTo[idx].IsNull()))
                            assignTo[idx] = Node(std::string(kvp.value.token));
                   }
                }
-               if (result.IsNull())
+               if (result.empty())
                {
                   if (haveAssignment)
                      return Node();
@@ -1028,13 +1025,13 @@ namespace YAML
                   }
                }
                else
-                  next.reset(result);
+                  next.swap(result);
             }
             continue;
 
             case YamlPathDetail::ESelector::Index:
             {
-               Node result;
+               std::vector<Node> result;
                for (auto el : next)
                {
                   if (!el || el.IsNull() || el.IsSequence())
@@ -1047,12 +1044,12 @@ namespace YAML
                      result.push_back(el[idx]);
                   }
                }
-               if (!result.IsSequence())
+               if (!result.size())
                {
-                  scan.SetError(EPathError::Internal);
+                  scan.SetError(EPathError::Internal);   // TODO: appropriate error
                   throw x;
                }
-               next.reset(result);
+               next.swap(result);
             }
             continue;
 
@@ -1061,9 +1058,14 @@ namespace YAML
                throw x;
          }
       }
-      if (next.IsSequence() && next.size() == 1)
-         next.reset(next[0]);
-      return next;
+
+      if (!next.size())
+         return Node(NodeType::Null);
+
+      Node final;
+      for (auto && el : next)
+         final.push_back(el);
+      return final;
    }
 
 } // namespace YAML

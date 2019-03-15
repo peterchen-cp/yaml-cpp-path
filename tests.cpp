@@ -110,10 +110,8 @@ using T = YamlNodeForDocTest;
 
 TEST_CASE("ThisCrashes")
 {
-   return;
-
    Node n = Create("{a=1,b=2}");
-   auto nb = n["b"];  // crash here (github: https://github.com/jbeder/yaml-cpp/issues/688)
+   auto nb = n["b"];  // crash here if original code without vectors is used (github: https://github.com/jbeder/yaml-cpp/issues/688)
 
    /*  Minimal repro:
    Node root(NodeType::Null);
@@ -641,24 +639,86 @@ TEST_CASE("Accumulate with custom op")
 }
 
 
-TEST_CASE("EnsureNode (start empty)")
+
+void CheckCreate(char const * path, char const * expectedNode)
 {
-   {
-      YAML::Node root = YAML::Node(YAML::NodeType::Null);
-      auto n = YAML::Ensure(root, "keyA.keyB");
-
-      auto expectedRoot = YAML::Load("{ keyA : { keyB : ~ } }");
-      CHECK(T(root) == T(expectedRoot));
-
-
-      CHECK(n.IsNull());
-      n = "1234";
-      CHECK(root["keyA"]["keyB"].as<std::string>() == "1234");
-
-      expectedRoot.reset(YAML::Load("{ keyA : { keyB : 1234 } }"));
-      CHECK(T(root) == T(expectedRoot));
-   }
+   auto n = YAML::Create(path);
+   std::string forDbg = (YAML::Emitter() << n).c_str();
+   auto expectedN = YAML::Load(expectedNode);
+   CHECK(T(n) == T(expectedN));
 }
+
+
+TEST_CASE("Create")
+{
+   CheckCreate("keyA.keyB",         "{ keyA : { keyB : ~ } }");
+   CheckCreate("keyA[2].keyB", "{ keyA : [ ~ , ~ , { keyB : ~ } ] } ");
+
+   // --- MapFilter Selector:
+   CheckCreate("keyA.{X}.keyB", "{ keyA : { X : { keyB : ~ } } }");                       // MFS: create one key  
+   CheckCreate("keyA.{X,Y}.keyB", "{ keyA : { X : { keyB : ~ }, Y : { keyB : ~ } } }");   // MFS: create two keys
+   CheckCreate("keyA.{X=11,Y}.keyB", "{ keyA : { X : 11, Y : { keyB : ~ } } }");          // MFS: create one, assign one
+   CheckCreate("keyA.{X=11,Y=12}", "{ keyA : { X : 11, Y : 12 } }");                      // MFS: assign two
+   CheckCreate("keyA.{X=11}", "{ keyA : { X : 11 } }");                                   // MFS: assign one
+
+   CheckCreate("{keyA=11,keyB,keyC}.{keyD,keyE=12}", 
+      "{ keyA : 11, keyB : { keyD : ~, keyE : 12 }, keyC : { keyD : ~, keyE : 12 } }");
+
+   // should fail: 
+   // CheckCreateFai("keyA.{X=11}.keyB"); 
+   // CheckCreateFai("keyA.{X=11,Y=12}.keyB"); 
+}
+
+
+void CheckEnsure(char const * initial, char const * path, size_t expectedEndNodeCount, char const * expectedRoot, char const * expectedAfterAssignment)
+{
+   YAML::Node root = initial ? YAML::Load(initial) : YAML::Node(YAML::NodeType::Null);
+
+   YAML::Node result = YAML::Ensure(root, path);
+
+   if (expectedEndNodeCount)
+   {
+      CHECK(result.IsSequence());
+      CHECK(result.size() == expectedEndNodeCount);
+   }
+   else
+      CHECK(result.size() == 0);
+
+   YAML::Node expectedRootY = YAML::Load(expectedRoot);
+   YAML::Node expectedAfterAssignmentY = YAML::Load(expectedAfterAssignment);
+
+   std::string rootS = (YAML::Emitter() << root).c_str();
+   CHECK(T(root) == T(expectedRootY));
+
+   for (size_t i=0; i<result.size(); ++i)
+   {
+      if (result[i].IsNull())
+         result[i] = YAML::Node("111");
+   }
+   std::string afterAssignmentS = (YAML::Emitter() << root).c_str();
+   CHECK(T(root) == T(expectedAfterAssignmentY));
+}
+
+TEST_CASE("Ensure")
+{
+   CheckEnsure(nullptr, "keyA.keyB", 1,
+      "{ keyA : { keyB : ~ } }",
+      "{ keyA : { keyB : 111 } }");
+
+   CheckEnsure("keyA : ", "keyA.keyB", 1,
+      "{ keyA : { keyB : ~ } }",
+      "{ keyA : { keyB : 111 } }");
+
+   CheckEnsure("keyA : 12", "{keyA,keyB}.keyC", 1,
+      "{ keyA : 12, keyB : { keyC : ~ } }",
+      "{ keyA : 12, keyB : { keyC : 111 } }");
+
+   CheckEnsure("keyA : 12", "{keyA=22,keyB}.{keyC=33,keyD,keyE}", 2,
+      "{ keyA : 12, keyB : { keyC : 33, keyD : ~, keyE : ~ } }",
+      "{ keyA : 12, keyB : { keyC : 33, keyD : 111, keyE : 111 } }");
+
+}
+
 
 
 
