@@ -67,6 +67,8 @@ namespace YAML
 
    Node Select(Node node, PathArg path, PathBoundArgs args = {}); ///< Select a node
    Node Require(Node node, PathArg path, PathBoundArgs args = {});
+   Node Create(PathArg path, PathBoundArgs args = {});
+   Node Ensure(Node & node, PathArg path, PathBoundArgs args = {}); ///< ensure one or more nodes exist. 
    EPathError PathValidate(PathArg p, std::string * valid = 0, size_t * errorOffs = 0);
    EPathError PathResolve(Node & node, PathArg & path, PathBoundArgs args = {}, PathException * px = 0);
 
@@ -84,11 +86,12 @@ namespace YAML
       InvalidToken,
       InvalidIndex,
       UnexpectedEnd,
+      SelectorNotSupported,
 
       // node navigation errors
       FirstNodeError_ = 100,     ///< all error codes after this indicate the selector was valid, but a matching node could not be found
       InvalidNodeType,
-      NodeNotFound
+      NodeNotFound,
       /* to add a new error code, also add: a formatter to PathException::What */
    };
 

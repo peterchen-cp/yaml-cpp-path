@@ -8,8 +8,17 @@
 #include <yaml-path/yaml-path.h>
 #include <yaml-path/yaml-path-internals.h>
 #include <iostream>
+#include <assert.h>
 
-using namespace YAML;
+struct YamlNodeForDocTest
+{
+   YAML::Node m_node;
+
+   YamlNodeForDocTest(YAML::Node n) : m_node(n) {}
+
+   operator YAML::Node & () { return m_node; }
+   operator YAML::Node const & () const { return m_node; }
+};
 
 namespace YAML
 {
@@ -29,8 +38,109 @@ namespace YAML
    {
       doctest::String toString(EToken value) { return DT2String(value, MapETokenName); }
       doctest::String toString(ESelector value) { return DT2String(value, MapESelectorName); }
+
+   }
+
+   doctest::String toString(YAML::Node const & n) { auto n2 = Clone(n); n2.SetStyle(EmitterStyle::Flow); return (Emitter() << n2).c_str(); }
+}
+
+
+using namespace YAML;
+
+
+
+// two nodes with equal content - simplifies the tests
+// map keys must be strings, and values are compared as strings
+bool Equal(YAML::Node a, YAML::Node b)
+{
+   if (a == b)
+      return true;
+
+   if (a.Type() != b.Type())
+      return false;
+
+   switch (a.Type())
+   {
+      case YAML::NodeType::Map:
+      {
+         if (a.size() != b.size())
+            return false;
+
+         for (auto it = a.begin(); it != a.end(); ++it)
+         {
+            auto key = it->first.as<std::string>();
+
+            auto rval = b[key];     // value with the same key. If all are the same, and size is the same, also there are no unchecked nodes
+            if (!Equal(rval, it->second))
+               return false;
+         }
+         return true;
+      }
+
+      case YAML::NodeType::Sequence:
+         if (a.size() != b.size())
+            return false;
+
+         for (size_t i = 0; i < a.size(); ++i)
+            if (!Equal(a[i], b[i]))
+               return false;
+
+         return true;
+
+      case YAML::NodeType::Scalar:
+         return a.as<std::string>() == b.as<std::string>();
+
+      case YAML::NodeType::Null:
+      case YAML::NodeType::Undefined:
+         return true;
+
+      default:
+         assert(false);    // unknown node type
+         return false;
    }
 }
+
+bool operator == (YamlNodeForDocTest const & a, YamlNodeForDocTest const & b) { return Equal(a, b); }
+bool operator != (YamlNodeForDocTest const & a, YamlNodeForDocTest const & b) { return Equal(a, b); }
+
+using T = YamlNodeForDocTest;
+
+
+
+
+TEST_CASE("ThisCrashes")
+{
+   Node n = Create("{a=1,b=2}");
+   auto nb = n["b"];  // crash here if original code without vectors is used (github: https://github.com/jbeder/yaml-cpp/issues/688)
+
+   /*  Minimal repro:
+   Node root(NodeType::Null);
+   Node next;
+   next.push_back(root);
+   Node el = next[0];
+
+   {
+      Node assignTo;
+      assignTo.push_back(el["a"]);
+      assignTo[0] = Node(std::string("1"));
+   }
+
+   {
+      Node assignTo;
+      assignTo.push_back(el["b"]);
+      assignTo[0] = Node(std::string("2"));
+   }
+
+   Node nb = root["b"];       // doesn't crash, can be omitted
+
+   next.reset();
+   el.reset();
+
+   Node nbA = root["a"];      // doesn't crash, can be omitted
+   Node nbB = root["b"];      // crashes
+   */
+}
+
 
 TEST_CASE("SelectByKey")
 {
@@ -530,6 +640,89 @@ TEST_CASE("Accumulate with custom op")
 
 
 
+void CheckCreate(char const * path, char const * expectedNode)
+{
+   auto n = YAML::Create(path);
+   std::string forDbg = (YAML::Emitter() << n).c_str();
+   auto expectedN = YAML::Load(expectedNode);
+   CHECK(T(n) == T(expectedN));
+}
+
+
+TEST_CASE("Create")
+{
+   CheckCreate("keyA.keyB",         "{ keyA : { keyB : ~ } }");
+   CheckCreate("keyA[2].keyB", "{ keyA : [ ~ , ~ , { keyB : ~ } ] } ");
+
+   // --- MapFilter Selector:
+   CheckCreate("keyA.{X}.keyB", "{ keyA : { X : { keyB : ~ } } }");                       // MFS: create one key  
+   CheckCreate("keyA.{X,Y}.keyB", "{ keyA : { X : { keyB : ~ }, Y : { keyB : ~ } } }");   // MFS: create two keys
+   CheckCreate("keyA.{X=11,Y}.keyB", "{ keyA : { X : 11, Y : { keyB : ~ } } }");          // MFS: create one, assign one
+   CheckCreate("keyA.{X=11,Y=12}", "{ keyA : { X : 11, Y : 12 } }");                      // MFS: assign two
+   CheckCreate("keyA.{X=11}", "{ keyA : { X : 11 } }");                                   // MFS: assign one
+
+   CheckCreate("{keyA=11,keyB,keyC}.{keyD,keyE=12}", 
+      "{ keyA : 11, keyB : { keyD : ~, keyE : 12 }, keyC : { keyD : ~, keyE : 12 } }");
+
+   // should fail: 
+   // CheckCreateFai("keyA.{X=11}.keyB"); 
+   // CheckCreateFai("keyA.{X=11,Y=12}.keyB"); 
+}
+
+
+void CheckEnsure(char const * initial, char const * path, size_t expectedEndNodeCount, char const * expectedRoot, char const * expectedAfterAssignment)
+{
+   YAML::Node root = initial ? YAML::Load(initial) : YAML::Node(YAML::NodeType::Null);
+
+   YAML::Node result = YAML::Ensure(root, path);
+
+   if (expectedEndNodeCount)
+   {
+      CHECK(result.IsSequence());
+      CHECK(result.size() == expectedEndNodeCount);
+   }
+   else
+      CHECK(result.size() == 0);
+
+   YAML::Node expectedRootY = YAML::Load(expectedRoot);
+   YAML::Node expectedAfterAssignmentY = YAML::Load(expectedAfterAssignment);
+
+   std::string rootS = (YAML::Emitter() << root).c_str();
+   CHECK(T(root) == T(expectedRootY));
+
+   for (size_t i=0; i<result.size(); ++i)
+   {
+      if (result[i].IsNull())
+         result[i] = YAML::Node("111");
+   }
+   std::string afterAssignmentS = (YAML::Emitter() << root).c_str();
+   CHECK(T(root) == T(expectedAfterAssignmentY));
+}
+
+TEST_CASE("Ensure")
+{
+   CheckEnsure(nullptr, "keyA.keyB", 1,
+      "{ keyA : { keyB : ~ } }",
+      "{ keyA : { keyB : 111 } }");
+
+   CheckEnsure("keyA : ", "keyA.keyB", 1,
+      "{ keyA : { keyB : ~ } }",
+      "{ keyA : { keyB : 111 } }");
+
+   CheckEnsure("keyA : 12", "{keyA,keyB}.keyC", 1,
+      "{ keyA : 12, keyB : { keyC : ~ } }",
+      "{ keyA : 12, keyB : { keyC : 111 } }");
+
+   CheckEnsure("keyA : 12", "{keyA=22,keyB}.{keyC=33,keyD,keyE}", 2,
+      "{ keyA : 12, keyB : { keyC : 33, keyD : ~, keyE : ~ } }",
+      "{ keyA : 12, keyB : { keyC : 33, keyD : 111, keyE : 111 } }");
+
+}
+
+
+
+
+
 bool is(char const * a, char const * b) { return _stricmp(a, b) == 0; }
 bool is(char const * a, char const * b, char const * balt) { return is(a,b) || (balt && is(a,balt)); }
 
@@ -569,6 +762,7 @@ int main(int argc, char ** argv)
      Require or R
      PathResolve or P
      PathValidate or V
+     Ensure or E
 )";
       return 0;
    }
@@ -649,6 +843,16 @@ int main(int argc, char ** argv)
                << "valid path: " << valid << "\n"
                << "error offset: " << erroffs << "\n";
          }
+         else if (is_(cmdidx, "E", "EnsureNode"))
+         {
+            YAML::PathException x;
+            std::string valid;
+            size_t erroffs = 0;
+            auto result = YAML::Ensure(root, yamlPath);
+
+            std::cout << (YAML::Emitter() << root).c_str() << "\n";
+         }
+
          else
             throw std::exception("unknown command");
       }
