@@ -112,7 +112,7 @@ namespace YAML
       std::size_t ErrorOffset() const { return m_offsTokenScan; }                            ///< index into the full path where the error occurred
       std::optional<size_t> BoundArg() const { return m_fromBoundArg;  }                     ///< if token was taken from a bound argument, this is its index
 
-      char const * what() const override { return What().c_str(); }                          ///< overrides \c std::exception::what, returning the detailed error message from \ref What
+      char const * what() const noexcept override { return What().c_str(); }                          ///< overrides \c std::exception::what, returning the detailed error message from \ref What
       std::string const & What(bool detailed = true) const;                
 
       static std::string GetErrorMessage(EPathError error);
