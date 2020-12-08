@@ -212,7 +212,7 @@ namespace YAML
       template <typename TBits, typename T>
       constexpr uint64_t BitsOf(std::initializer_list<T> values)
       {
-         __int64 bits = 0;
+         int64_t bits = 0;
          for (auto v : values)
             bits |= TBits(1) << TBits(v);
          return bits;
