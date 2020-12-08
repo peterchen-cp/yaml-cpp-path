@@ -26,6 +26,9 @@ SOFTWARE.
 #include "yaml-path-internals.h"
 #include <yaml-cpp/yaml.h>
 #include <assert.h>
+#include <algorithm>
+#include <cstring>
+#include <strings.h>
 
 /// namspace shared by yaml-cpp and yaml-path
 namespace YAML
@@ -681,7 +684,7 @@ namespace YAML
 
          // Unicode: some assumptions here don't hold. It's strcoll, stricoll, and I'm not sure how to implement no-case starry matches
          size_t cmpLen = std::min(tok.token.length(), snode.length());
-         int result = tok.noCase ? _strnicmp(&tok.token[0], snode.c_str(), cmpLen) : strncmp(&tok.token[0], snode.c_str(), cmpLen);
+         int result = tok.noCase ? strncasecmp(&tok.token[0], snode.c_str(), cmpLen) : strncmp(&tok.token[0], snode.c_str(), cmpLen);
 
          return result == 0; // under assumption of above length-based shortcuts
       }
@@ -923,22 +926,21 @@ namespace YAML
 
    namespace YamlPathDetail
    {
-      Node EnsureNodeApplyKeyToMapOrNothing(Node & start, std::string key)
+      Node EnsureNodeApplyKeyToMapOrNothing(const Node & start, std::string key)
       {
          Node n = start[key];
          if (n)
             return n;
-         start[key] = Node(NodeType::Null);
-         return start[key];
+         return Node(NodeType::Null);
       }
 
-      void EnsureNodeApplyKey(std::vector<Node> & result, Node & start, std::string key, bool recurse)
+      void EnsureNodeApplyKey(std::vector<Node> & result, const Node & start, std::string key, bool recurse)
       {
          if (!start || start.IsNull() || start.IsMap())
             result.push_back(EnsureNodeApplyKeyToMapOrNothing(start, key));
          else if (start.IsSequence() && recurse)
          {
-            for (auto & el : start)
+            for (auto& el : start)
                if (el.IsNull() || el.IsMap())
                   EnsureNodeApplyKey(result, el, key, false);
          }
@@ -946,7 +948,7 @@ namespace YAML
 
       void EnsureNodeApplyKey(std::vector<Node> & result, std::vector<Node> & start, std::string key)
       {
-         for (auto & el : start)
+         for (auto& el : start)
             if (el.IsNull() || el.IsMap())
                EnsureNodeApplyKey(result, el, key, true);
       }
