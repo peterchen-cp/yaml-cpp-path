@@ -85,6 +85,15 @@ namespace YAML
 
    namespace YamlPathDetail
    {
+      /// \internal result = target; target = newValue
+      template <typename T1, typename T2>
+      T1 Exchange(T1 & target, T2 newValue)
+      {
+         T1 result = std::move(target);
+         target = std::move(newValue);
+         return std::move(result);
+      }
+
       /// \internal uses the same mapping as \ref MapValue to create diagnostic for a bit mask (e.g. created by \ref BitsOf)
       template <typename T2, typename TBit, typename TMask>
       std::string MapBitMask(TMask value, std::initializer_list<std::pair<TBit, T2>> values, T2 sep = ", ")
@@ -167,15 +176,6 @@ namespace YAML
       {
          static auto undefinedNode = Node()["x"];
          return undefinedNode;
-      }
-
-      /// \internal result = target; target = newValue
-      template <typename T1, typename T2>
-      T1 Exchange(T1 & target, T2 newValue)
-      {
-         T1 result = std::move(target);
-         target = std::move(newValue);
-         return std::move(result);
       }
 
 
